@@ -71,13 +71,13 @@ def get_session_metadata(path: Path) -> Optional[SessionNode]:
     if not messages:
         return None
 
-    # Get timestamp
+    # Get timestamp (use LAST timestamp = most recent activity)
     timestamp = None
     for msg in messages:
         ts = msg.get("timestamp")
         if ts:
             timestamp = ts
-            break
+            # Don't break - keep going to find the MOST RECENT timestamp
 
     # Get files touched
     files_touched, _ = extract_files_and_tools(messages)
