@@ -667,6 +667,9 @@ def generate_html_dashboard(
             color: #8b949e;
         }}
 
+        .session-card .session-date {{ color: #58a6ff; font-weight: 600; font-size: 1.1em; }}
+        .session-card .session-relative {{ color: #6e7681; font-size: 0.9em; }}
+
         .session-card .wip-badge {{ background: #d2992220; color: #d29922; padding: 2px 6px; border-radius: 4px; font-size: 0.7em; }}
         .session-card .gate-badge {{ background: #00d9ff20; color: #00d9ff; padding: 2px 6px; border-radius: 4px; font-size: 0.7em; }}
 
@@ -1144,12 +1147,22 @@ def generate_html_dashboard(
                 gated_class = "gated" if session["gate_name"] else ""
                 summary = session["summary"][:100] + "..." if len(session["summary"]) > 100 else session["summary"]
 
+                # Format actual date (e.g., "Jan 26, 2026")
+                actual_date = ""
+                if session.get("datetime"):
+                    try:
+                        dt = datetime.fromisoformat(session["datetime"])
+                        actual_date = dt.strftime("%b %d, %Y")
+                    except:
+                        actual_date = ""
+
                 html_content += f'''
                         <div class="session-card {gated_class}" onclick="showSession('{session["id"]}')" data-search="{session['summary'].lower()} {session['project'].lower()} {session['short_id'].lower()}">
                             <span class="session-id">#{session["short_id"]}</span>
                             <span class="session-summary">{summary}</span>
                             <div class="session-meta">
-                                <span>{session["relative_time"]}</span>
+                                <span class="session-date">{actual_date}</span>
+                                <span class="session-relative">({session["relative_time"]})</span>
                                 {gate_badge}
                                 {wip_badge}
                             </div>
