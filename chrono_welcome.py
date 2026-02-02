@@ -256,6 +256,7 @@ def show_welcome_menu() -> Optional[str]:
     print(f"  {DIM}k{RESET} │ Tech         │ Run workflow automation")
     print(f"  {DIM}w{RESET} │ Gate         │ Time gate bookmarks")
     print(f"  {DIM}i{RESET} │ Epoch        │ Git time machine")
+    print(f"  {DIM}r{RESET} │ Reindex      │ Force re-index all sessions 🔄")
     print()
     print(f"  {BOLD}📍 OTHER{RESET}")
     print(f"  {'─' * 55}")
@@ -354,6 +355,17 @@ def show_welcome_menu() -> Optional[str]:
             if epoch_cmd:
                 return f"egit {epoch_cmd}"
             return "egit"
+
+        if choice == "r":
+            print(f"\n  {BOLD}🔄 FORCE RE-INDEX{RESET}")
+            print(f"  {DIM}This will re-index ALL sessions with fresh timestamps.{RESET}")
+            print(f"  {DIM}Use this when sessions show wrong 'When' times.{RESET}\n")
+            confirm = input(f"  {BOLD}Re-index all sessions? (y/N):{RESET} ").strip().lower()
+            if confirm == "y":
+                print(f"\n  {BOLD}⏳ Starting re-index... (runs in background){RESET}")
+                print(f"  {DIM}Run 'chrono export' when done to refresh dashboard{RESET}\n")
+                return "cd ~/Desktop/smart-forking && source venv/bin/activate && python indexer.py --reindex"
+            return None
 
         if choice == "n":
             print(f"\n  {BOLD}✓ Starting fresh timeline{RESET}")
