@@ -22,43 +22,53 @@ from vector_store import SessionVectorStore
 def find_relevant_sessions(
     query: str,
     top_k: int = 5,
-    project_filter: Optional[str] = None
+    project_filter: Optional[str] = None,
+    sort_by: str = "relevance"
 ) -> List[Dict]:
     """
     Find the most relevant past sessions for a given query.
-    
+
     Args:
         query: Natural language description of what you want to do
         top_k: Number of sessions to return
         project_filter: Optional project name to filter results
-        
+        sort_by: "relevance" (default) or "date" (newest first)
+
     Returns:
         List of session dicts with scores and metadata
     """
     embedder = EmbeddingService()
     store = SessionVectorStore()
-    
+
     # Check if we have any indexed sessions
     stats = store.get_stats()
     if stats.get("total_chunks", 0) == 0:
         print("\n⚠ No sessions indexed yet!")
         print("Run 'python indexer.py' first to build your search index.")
         return []
-    
+
     # Embed the query
     query_embedding = embedder.embed(query)
-    
-    # Search for similar sessions
-    sessions = store.search_sessions(query_embedding, n_sessions=top_k * 2)
-    
+
+    # Search for similar sessions (get more for filtering/sorting)
+    sessions = store.search_sessions(query_embedding, n_sessions=top_k * 3)
+
     # Filter by project if specified
     if project_filter:
         project_lower = project_filter.lower()
         sessions = [
-            s for s in sessions 
+            s for s in sessions
             if project_lower in s.get("project", "").lower()
         ]
-    
+
+    # Sort by date if requested
+    if sort_by == "date":
+        sessions = sorted(
+            sessions,
+            key=lambda s: s.get("timestamp", ""),
+            reverse=True  # Newest first
+        )
+
     return sessions[:top_k]
 
 
@@ -88,13 +98,14 @@ def format_results(query: str, sessions: List[Dict]) -> str:
         score = session.get("score", 0)
         project = session.get("project", "unknown")
         preview = session.get("preview", "")[:80]
-        
+        timestamp = session.get("timestamp", "")[:10] if session.get("timestamp") else "unknown"
+
         # Mark recommended
         recommended = " (Recommended)" if i == 1 else ""
-        
+
         lines.append(f"› {i}. #{session_id[:8]}{recommended}")
         lines.append(f"     {preview}...")
-        lines.append(f"     Project: {project} | Score: {score}%")
+        lines.append(f"     Project: {project} | Score: {score}% | Date: {timestamp}")
         lines.append("")
     
     # Add options
@@ -185,7 +196,14 @@ Examples:
         type=str,
         help="Filter results to a specific project"
     )
-    
+
+    parser.add_argument(
+        "--sort", "-s",
+        choices=["relevance", "date"],
+        default="relevance",
+        help="Sort by 'relevance' (default) or 'date' (newest first)"
+    )
+
     parser.add_argument(
         "--interactive", "-i",
         action="store_true",
@@ -212,7 +230,8 @@ Examples:
     sessions = find_relevant_sessions(
         query=query,
         top_k=args.top,
-        project_filter=args.project
+        project_filter=args.project,
+        sort_by=args.sort
     )
     
     # Output

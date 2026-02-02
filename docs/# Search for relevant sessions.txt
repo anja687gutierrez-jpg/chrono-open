@@ -1,0 +1,5 @@
+# Search for relevant sessions
+python fork_detect.py "what you want to build"
+
+# Then copy the fork command to a new terminal
+claude --continue bf695425-407f-4bcd-b1d2-6d2277f59399; '/Users/anjacarrillo/Library/CloudStorage/GoogleDrive-anja687gutierrez@gmail.com/My Drive/Business/Gutierrez Ventures LLC'; 
