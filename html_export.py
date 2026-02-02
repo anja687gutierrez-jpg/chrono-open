@@ -503,8 +503,16 @@ def generate_html_dashboard(
         .gate-card .gate-name {{ font-weight: bold; color: #00d9ff; }}
         .gate-card .gate-session {{ font-size: 0.8em; color: #8b949e; font-family: monospace; }}
 
-        /* Search */
-        .search-container {{ margin-bottom: 25px; }}
+        /* Search & Sort Controls */
+        .controls-bar {{
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            align-items: center;
+        }}
+
+        .search-container {{ flex: 1; min-width: 250px; }}
 
         .search-input {{
             width: 100%;
@@ -520,6 +528,28 @@ def generate_html_dashboard(
 
         .search-input:focus {{ border-color: #58a6ff; box-shadow: 0 0 0 3px #58a6ff20; }}
         .search-input::placeholder {{ color: #484f58; }}
+
+        .sort-controls {{
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }}
+
+        .sort-label {{ color: #8b949e; font-size: 0.85em; }}
+
+        .sort-btn {{
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            background: #161b22;
+            color: #c9d1d9;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }}
+
+        .sort-btn:hover {{ background: #21262d; border-color: #58a6ff; }}
+        .sort-btn.active {{ background: #388bfd; border-color: #388bfd; color: #fff; }}
 
         /* Project Detail View */
         .project-section {{ display: none; margin-bottom: 40px; }}
@@ -923,9 +953,18 @@ def generate_html_dashboard(
     html_content += '''
             </div>
 
-            <!-- Search -->
-            <div class="search-container">
-                <input type="text" class="search-input" id="search" placeholder="🔍 Search sessions by summary, project, or ID..." onkeyup="filterSessions()">
+            <!-- Search & Sort Controls -->
+            <div class="controls-bar">
+                <div class="search-container">
+                    <input type="text" class="search-input" id="search" placeholder="🔍 Search by ID (e.g. #e46b9a78), project, or keyword..." onkeyup="filterSessions()">
+                </div>
+                <div class="sort-controls">
+                    <span class="sort-label">Sort by:</span>
+                    <button class="sort-btn active" onclick="sortProjects('health')" data-sort="health">🏆 Health</button>
+                    <button class="sort-btn" onclick="sortProjects('recent')" data-sort="recent">🕐 Recent</button>
+                    <button class="sort-btn" onclick="sortProjects('name')" data-sort="name">🔤 Name</button>
+                    <button class="sort-btn" onclick="sortProjects('sessions')" data-sort="sessions">📊 Sessions</button>
+                </div>
             </div>
 '''
 
@@ -1185,15 +1224,78 @@ def generate_html_dashboard(
         }}
 
         function filterSessions() {{
-            const query = document.getElementById('search').value.toLowerCase();
+            const query = document.getElementById('search').value.toLowerCase().replace('#', '');
             document.querySelectorAll('.session-card').forEach(card => {{
                 const searchText = card.dataset.search || '';
-                card.style.display = searchText.includes(query) ? 'grid' : 'none';
+                const sessionId = card.querySelector('.session-id')?.textContent.toLowerCase().replace('#', '') || '';
+                const matches = searchText.includes(query) || sessionId.includes(query);
+                card.style.display = matches ? 'grid' : 'none';
+                // Highlight matching ID
+                if (query.length >= 4 && sessionId.includes(query)) {{
+                    card.style.borderColor = '#00d9ff';
+                }} else {{
+                    card.style.borderColor = '';
+                }}
             }});
             document.querySelectorAll('.project-overview-card').forEach(card => {{
                 const name = card.querySelector('.name').textContent.toLowerCase();
                 card.style.display = name.includes(query) ? 'block' : 'none';
             }});
+        }}
+
+        // Project sorting
+        const projectData = {{}};
+        document.querySelectorAll('.project-overview-card').forEach(card => {{
+            const name = card.querySelector('.name').textContent;
+            const score = parseInt(card.querySelector('.score')?.textContent) || 0;
+            const sessions = parseInt(card.querySelector('.metric .num')?.textContent) || 0;
+            const lastActivity = card.querySelector('.last-activity')?.textContent || '';
+            projectData[name] = {{ card, name, score, sessions, lastActivity }};
+        }});
+
+        function sortProjects(sortBy) {{
+            // Update button states
+            document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-sort="${{sortBy}}"]`).classList.add('active');
+
+            const grid = document.querySelector('.project-cards-grid');
+            if (!grid) return;
+
+            const cards = Array.from(grid.querySelectorAll('.project-overview-card'));
+
+            cards.sort((a, b) => {{
+                const aName = a.querySelector('.name').textContent;
+                const bName = b.querySelector('.name').textContent;
+                const aScore = parseInt(a.querySelector('.score')?.textContent) || 0;
+                const bScore = parseInt(b.querySelector('.score')?.textContent) || 0;
+                const aSessions = parseInt(a.querySelector('.metric .num')?.textContent) || 0;
+                const bSessions = parseInt(b.querySelector('.metric .num')?.textContent) || 0;
+                const aActivity = a.querySelector('.last-activity')?.textContent || 'zzz';
+                const bActivity = b.querySelector('.last-activity')?.textContent || 'zzz';
+
+                switch(sortBy) {{
+                    case 'health':
+                        return bScore - aScore;
+                    case 'recent':
+                        // Parse "Today", "Yesterday", "Xd ago"
+                        const parseActivity = (str) => {{
+                            if (str === 'Today') return 0;
+                            if (str === 'Yesterday') return 1;
+                            const match = str.match(/(\d+)d ago/);
+                            return match ? parseInt(match[1]) : 999;
+                        }};
+                        return parseActivity(aActivity) - parseActivity(bActivity);
+                    case 'name':
+                        return aName.localeCompare(bName);
+                    case 'sessions':
+                        return bSessions - aSessions;
+                    default:
+                        return 0;
+                }}
+            }});
+
+            // Re-append in sorted order
+            cards.forEach(card => grid.appendChild(card));
         }}
 
         function showSession(sessionId) {{
