@@ -241,10 +241,24 @@ def show_welcome_menu() -> Optional[str]:
     print(f"  {'─' * 55}")
     print(f"  {DIM}s{RESET} │ Search       │ Find sessions by keyword")
     print(f"  {DIM}e{RESET} │ Eras         │ Browse by time period")
-    print(f"  {DIM}x{RESET} │ Explode      │ Analyze a session (CADDY-style)")
-    print(f"  {DIM}t{RESET} │ Tree         │ Visual relationships")
+    print()
+    print(f"  {BOLD}🔬 CADDY-STYLE{RESET}")
+    print(f"  {'─' * 55}")
+    print(f"  {DIM}x{RESET} │ Explode      │ Break apart a session")
+    print(f"  {DIM}t{RESET} │ Tree         │ Visual relationship tree")
+    print(f"  {DIM}m{RESET} │ Similar      │ Find semantically related sessions")
+    print(f"  {DIM}g{RESET} │ Graph        │ Session connections")
     print(f"  {DIM}h{RESET} │ HTML         │ Open project dashboard")
+    print()
+    print(f"  {BOLD}🛠️ TOOLS{RESET}")
+    print(f"  {'─' * 55}")
     print(f"  {DIM}l{RESET} │ Lavos        │ Project health scan 🔥")
+    print(f"  {DIM}k{RESET} │ Tech         │ Run workflow automation")
+    print(f"  {DIM}w{RESET} │ Gate         │ Time gate bookmarks")
+    print(f"  {DIM}i{RESET} │ Epoch        │ Git time machine")
+    print()
+    print(f"  {BOLD}📍 OTHER{RESET}")
+    print(f"  {'─' * 55}")
     print(f"  {DIM}n{RESET} │ New          │ Start fresh session")
     print(f"  {DIM}p{RESET} │ Pin          │ Pin/unpin a project")
     print(f"  {DIM}q{RESET} │ Quit         │ Exit chrono")
@@ -293,10 +307,20 @@ def show_welcome_menu() -> Optional[str]:
                 return f"chrono tree {session_id}"
             return None
 
+        if choice == "m":
+            session_id = input(f"  {BOLD}Session ID to find similar:{RESET} ").strip()
+            if session_id:
+                return f"chrono similar {session_id}"
+            return None
+
         if choice == "g":
-            target = input(f"  {BOLD}Project name:{RESET} ").strip()
+            target = input(f"  {BOLD}Session ID or project name:{RESET} ").strip()
             if target:
-                return f"chrono graph --project {target}"
+                # If it looks like a session ID (hex), use it directly
+                if len(target) >= 6 and all(c in '0123456789abcdef-' for c in target.lower()):
+                    return f"chrono graph {target}"
+                else:
+                    return f"chrono graph --project {target}"
             return None
 
         if choice == "h":
@@ -305,6 +329,31 @@ def show_welcome_menu() -> Optional[str]:
         if choice == "l":
             print(f"\n  {BOLD}🔥 Scanning for Lavos...{RESET}\n")
             return "lavos"
+
+        if choice == "k":
+            print(f"\n  {BOLD}⚔️ Available Techs:{RESET}")
+            print(f"  {DIM}fire (build), ice (test), slash (lint), cure (fix){RESET}")
+            print(f"  {DIM}antipode (build+test), luminaire (full CI){RESET}\n")
+            tech_name = input(f"  {BOLD}Tech to run (or 'list'):{RESET} ").strip()
+            if tech_name:
+                return f"tech {tech_name}"
+            return None
+
+        if choice == "w":
+            print(f"\n  {BOLD}⏰ Time Gates:{RESET}")
+            print(f"  {DIM}save <name>, list, jump <name>, delete <name>{RESET}\n")
+            gate_cmd = input(f"  {BOLD}Gate command:{RESET} ").strip()
+            if gate_cmd:
+                return f"gate {gate_cmd}"
+            return "gate list"
+
+        if choice == "i":
+            print(f"\n  {BOLD}🕰️ Epoch Git Commands:{RESET}")
+            print(f"  {DIM}log, branches, timeline, jump <branch>{RESET}\n")
+            epoch_cmd = input(f"  {BOLD}Epoch command (or Enter for status):{RESET} ").strip()
+            if epoch_cmd:
+                return f"egit {epoch_cmd}"
+            return "egit"
 
         if choice == "n":
             print(f"\n  {BOLD}✓ Starting fresh timeline{RESET}")
@@ -322,7 +371,7 @@ def show_welcome_menu() -> Optional[str]:
         if len(choice) >= 6:
             return f"claude --continue {choice}"
 
-        print(f"  {DIM}Unknown option. Try a number (1-{len(project_commands)}) or letter (s/e/x/t/h/l/n/p/q){RESET}")
+        print(f"  {DIM}Unknown option. Try number (1-{len(project_commands)}) or letter{RESET}")
         return None
 
     except KeyboardInterrupt:
