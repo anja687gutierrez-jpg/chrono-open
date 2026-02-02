@@ -123,7 +123,14 @@ def calculate_enhanced_project_health(sessions: List[Dict]) -> Dict:
         "momentum": "stable",  # increasing, stable, decreasing
     })
 
-    for session in sessions:
+    # Sort sessions by date (newest first) before grouping
+    sorted_sessions = sorted(
+        sessions,
+        key=lambda s: s.get("datetime") or "1900-01-01",
+        reverse=True
+    )
+
+    for session in sorted_sessions:
         proj_name = session["project"]
         proj = projects[proj_name]
 
@@ -670,6 +677,9 @@ def generate_html_dashboard(
         .session-card .session-date {{ color: #58a6ff; font-weight: 600; font-size: 1.1em; }}
         .session-card .session-relative {{ color: #6e7681; font-size: 0.9em; }}
 
+        .session-card .bookmark-icon {{ color: #ffd700; margin-right: 4px; font-size: 1em; }}
+        .session-card.gated {{ border-left: 3px solid #ffd700; }}
+
         .session-card .wip-badge {{ background: #d2992220; color: #d29922; padding: 2px 6px; border-radius: 4px; font-size: 0.7em; }}
         .session-card .gate-badge {{ background: #00d9ff20; color: #00d9ff; padding: 2px 6px; border-radius: 4px; font-size: 0.7em; }}
 
@@ -1141,9 +1151,16 @@ def generate_html_dashboard(
                     <div class="sessions-list">
 '''
 
-            for session in era_sessions:
+            # Sort sessions within era by date (newest first)
+            sorted_era_sessions = sorted(
+                era_sessions,
+                key=lambda s: s.get("datetime") or "1900-01-01",
+                reverse=True
+            )
+
+            for session in sorted_era_sessions:
                 wip_badge = '<span class="wip-badge">⚠️ WIP</span>' if session["has_wip"] else ""
-                gate_badge = f'<span class="gate-badge">🌀 {session["gate_name"]}</span>' if session["gate_name"] else ""
+                bookmark_icon = '<span class="bookmark-icon" title="Bookmarked">⭐</span>' if session["gate_name"] else ""
                 gated_class = "gated" if session["gate_name"] else ""
                 summary = session["summary"][:100] + "..." if len(session["summary"]) > 100 else session["summary"]
 
@@ -1158,12 +1175,11 @@ def generate_html_dashboard(
 
                 html_content += f'''
                         <div class="session-card {gated_class}" onclick="showSession('{session["id"]}')" data-search="{session['summary'].lower()} {session['project'].lower()} {session['short_id'].lower()}">
-                            <span class="session-id">#{session["short_id"]}</span>
+                            <span class="session-id">{bookmark_icon}#{session["short_id"]}</span>
                             <span class="session-summary">{summary}</span>
                             <div class="session-meta">
                                 <span class="session-date">{actual_date}</span>
                                 <span class="session-relative">({session["relative_time"]})</span>
-                                {gate_badge}
                                 {wip_badge}
                             </div>
                         </div>
