@@ -243,7 +243,8 @@ def show_welcome_menu() -> Optional[str]:
     print(f"  {DIM}e{RESET} │ Eras         │ Browse by time period")
     print(f"  {DIM}x{RESET} │ Explode      │ Analyze a session (CADDY-style)")
     print(f"  {DIM}t{RESET} │ Tree         │ Visual relationships")
-    print(f"  {DIM}h{RESET} │ HTML         │ Open interactive explorer")
+    print(f"  {DIM}h{RESET} │ HTML         │ Open project dashboard")
+    print(f"  {DIM}l{RESET} │ Lavos        │ Project health scan 🔥")
     print(f"  {DIM}n{RESET} │ New          │ Start fresh session")
     print(f"  {DIM}p{RESET} │ Pin          │ Pin/unpin a project")
     print(f"  {DIM}q{RESET} │ Quit         │ Exit chrono")
@@ -301,6 +302,10 @@ def show_welcome_menu() -> Optional[str]:
         if choice == "h":
             return "chrono export"
 
+        if choice == "l":
+            print(f"\n  {BOLD}🔥 Scanning for Lavos...{RESET}\n")
+            return "lavos"
+
         if choice == "n":
             print(f"\n  {BOLD}✓ Starting fresh timeline{RESET}")
             print(f"  Run: claude\n")
@@ -317,7 +322,7 @@ def show_welcome_menu() -> Optional[str]:
         if len(choice) >= 6:
             return f"claude --continue {choice}"
 
-        print(f"  {DIM}Unknown option. Try a number (1-{len(project_commands)}) or letter (s/e/x/t/h/n/p/q){RESET}")
+        print(f"  {DIM}Unknown option. Try a number (1-{len(project_commands)}) or letter (s/e/x/t/h/l/n/p/q){RESET}")
         return None
 
     except KeyboardInterrupt:
