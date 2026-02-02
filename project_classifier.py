@@ -29,10 +29,16 @@ from summary_store import SummaryStore
 # Known projects with detection keywords and file patterns
 KNOWN_PROJECTS = {
     "MagnusView": {
-        "keywords": ["magnus", "magnusview", "dashboard", "milestone", "campaign", "stap", "ops portal", "ops hub", "availability.js"],
-        "file_patterns": ["MagnusView", "Ops Hub Portal", "Ops-Hub-Portal"],
+        "keywords": ["magnus", "magnusview", "milestone", "campaign", "stap", "availability.js"],
+        "file_patterns": ["MagnusView"],
         "emoji": "📊",
         "description": "Dashboard application for operations management"
+    },
+    "Ops-Portal": {
+        "keywords": ["ops portal", "ops hub", "ops-portal", "ops_portal", "operations portal", "ops-hub-portal"],
+        "file_patterns": ["Ops Hub Portal", "Ops-Hub-Portal", "ops-portal"],
+        "emoji": "🏢",
+        "description": "Operations management portal (sandbox)"
     },
     "Smart-Forking": {
         "keywords": ["smart-forking", "chrono", "fork", "embedding", "vector", "session", "epoch", "lavos", "techs.py"],
