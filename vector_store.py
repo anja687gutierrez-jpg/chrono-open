@@ -1,8 +1,9 @@
 """
-Vector Store using ChromaDB
+Vector Store using ChromaDB (Chrono)
 Stores and searches session embeddings for semantic similarity.
 
-Data is persisted locally at ~/.smart-forking/chroma/
+Data is persisted locally at ~/.chrono/chroma/
+(Legacy: ~/.smart-forking/chroma/ also supported)
 """
 
 from typing import List, Dict, Any, Optional
@@ -22,13 +23,32 @@ class SearchResult:
     content: str = ""
 
 
+def get_chrono_data_dir() -> Path:
+    """Get the Chrono data directory, supporting migration from old path."""
+    new_path = Path.home() / ".chrono"
+    old_path = Path.home() / ".smart-forking"
+
+    # Prefer new path if it exists
+    if new_path.exists():
+        return new_path
+    # Fall back to old path if it exists
+    if old_path.exists():
+        return old_path
+    # Default to new path for fresh installs
+    return new_path
+
+
 class SessionVectorStore:
     """ChromaDB-based vector store for Claude Code sessions."""
-    
-    def __init__(self, persist_dir: str = "~/.smart-forking/chroma"):
-        self.persist_path = Path(persist_dir).expanduser()
+
+    def __init__(self, persist_dir: str = None):
+        if persist_dir:
+            self.persist_path = Path(persist_dir).expanduser()
+        else:
+            self.persist_path = get_chrono_data_dir() / "chroma"
+
         self.persist_path.mkdir(parents=True, exist_ok=True)
-        
+
         self._client = None
         self._collection = None
     
@@ -302,6 +322,47 @@ class SessionVectorStore:
             return list(session_info.values())[:limit]
         except:
             return []
+
+    def count_session_chunks(self, session_id: str) -> int:
+        """Count how many chunks exist for a session in the store."""
+        try:
+            results = self.collection.get(
+                where={"session_id": {"$eq": session_id}},
+                include=[]
+            )
+            return len(results.get("ids", []))
+        except:
+            return 0
+
+    def search_with_exclusions(
+        self,
+        query_embedding: List[float],
+        n_results: int = 20,
+        project_filter: Optional[str] = None,
+        exclude_sessions: Optional[List[str]] = None
+    ) -> List[SearchResult]:
+        """
+        Search with optional session exclusion (e.g., exclude active sessions).
+
+        Args:
+            query_embedding: The embedding to search with
+            n_results: Maximum number of results
+            project_filter: Optional project name to filter by
+            exclude_sessions: Session IDs to exclude from results
+
+        Returns:
+            List of SearchResult objects, sorted by score (highest first)
+        """
+        # Get more results to compensate for exclusions
+        extra = len(exclude_sessions) * 3 if exclude_sessions else 0
+        results = self.search(query_embedding, n_results + extra, project_filter)
+
+        if not exclude_sessions:
+            return results[:n_results]
+
+        # Filter out excluded sessions
+        filtered = [r for r in results if r.session_id not in exclude_sessions]
+        return filtered[:n_results]
 
 
 # ============================================================

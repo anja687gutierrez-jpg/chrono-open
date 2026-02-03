@@ -25,7 +25,8 @@ from project_classifier import (
 )
 
 # Import gates data
-GATES_FILE = Path.home() / ".smart-forking" / "gates.json"
+from chrono_config import get_gates_path
+GATES_FILE = get_gates_path()
 
 
 def load_gates() -> Dict:

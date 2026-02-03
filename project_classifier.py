@@ -103,7 +103,8 @@ class SessionProject:
 # Pinned Projects Storage
 # ============================================================
 
-PINS_FILE = Path.home() / ".smart-forking" / "pinned_projects.json"
+from chrono_config import get_pinned_projects_path
+PINS_FILE = get_pinned_projects_path()
 
 
 def load_pinned_projects() -> Dict:

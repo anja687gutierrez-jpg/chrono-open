@@ -54,7 +54,7 @@ ERAS = [
         game_year="600 AD",
         time_period="1-4 Weeks Ago",
         description="Recent sessions from the past few weeks",
-        color="\033[93m",  # Yellow
+        color="\033[94m",  # Blue (visible on light backgrounds)
         min_days_ago=7,
         max_days_ago=30
     ),
@@ -108,15 +108,33 @@ END_OF_TIME = Era(
     game_year="???",
     time_period="Pinned",
     description="Important bookmarked sessions - your hub between all eras",
-    color="\033[97m",  # White (neutral, timeless)
+    color="\033[90m",  # Dark gray (neutral, visible on both light/dark)
     min_days_ago=0,
     max_days_ago=None
 )
 
-# ANSI color codes
+# ============================================================
+# ANSI Color Palette (works on both light and dark backgrounds)
+# ============================================================
 RESET = "\033[0m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
+
+# Primary colors - chosen for visibility on white/light backgrounds
+GREEN = "\033[92m"       # Success, Present era
+BLUE = "\033[94m"        # Info, Middle Ages era (replaces yellow)
+MAGENTA = "\033[95m"     # Accent, Antiquity era
+RED = "\033[91m"         # Error/warning, Prehistory era
+CYAN = "\033[96m"        # Highlight, interactive elements
+GRAY = "\033[90m"        # Neutral, End of Time (dark gray, visible on both)
+
+# Semantic colors
+SUCCESS = GREEN
+INFO = BLUE
+WARNING = "\033[38;5;208m"  # Orange (visible on both light/dark)
+ERROR = RED
+ACCENT = MAGENTA
+HIGHLIGHT = CYAN
 
 
 def get_era_by_code(code: str) -> Optional[Era]:

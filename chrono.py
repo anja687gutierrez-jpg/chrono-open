@@ -71,7 +71,8 @@ def find_sessions_chrono(
     era_filter: Optional[Era] = None,
     since: Optional[datetime] = None,
     until: Optional[datetime] = None,
-    sort_by: str = "relevance"
+    sort_by: str = "relevance",
+    exclude_active: bool = True
 ) -> List[Dict]:
     """
     Find relevant past sessions with Chrono-style filtering.
@@ -84,10 +85,13 @@ def find_sessions_chrono(
         since: Optional start date (inclusive)
         until: Optional end date (inclusive)
         sort_by: "relevance" (default) or "date" (newest first)
+        exclude_active: If True, exclude sessions currently open in terminals
 
     Returns:
         List of session dicts with scores, metadata, and era classification
     """
+    from session_utils import get_active_session_ids
+
     embedder = EmbeddingService()
     store = SessionVectorStore()
 
@@ -95,14 +99,21 @@ def find_sessions_chrono(
     stats = store.get_stats()
     if stats.get("total_chunks", 0) == 0:
         print(f"\n{BOLD}⚠ No sessions indexed yet!{RESET}")
-        print("Run 'python indexer.py' first to build your search index.")
+        print("Run 'chrono index' first to build your search index.")
         return []
+
+    # Get active sessions to exclude
+    active_sessions = get_active_session_ids() if exclude_active else set()
 
     # Embed the query
     query_embedding = embedder.embed(query)
 
     # Search for similar sessions (get more for filtering)
     sessions = store.search_sessions(query_embedding, n_sessions=top_k * 5)
+
+    # Filter out active sessions first
+    if active_sessions:
+        sessions = [s for s in sessions if s.get("session_id") not in active_sessions]
 
     # Apply filters
     filtered_sessions = []
@@ -537,9 +548,27 @@ def main():
   %(prog)s export                            # Generate interactive HTML explorer
   %(prog)s export ~/my_sessions.html         # Custom output path
 
-{BOLD}Coming Soon:{RESET}
-  🚀 future       - Predicted Issues (Lavos Detection)
-  ⏳ end_of_time  - Pinned Sessions (Time Gates)
+{BOLD}Indexing:{RESET}
+  %(prog)s index                             # Index new sessions
+  %(prog)s index --reindex                   # Rebuild entire index
+
+{BOLD}Time Gates (Bookmarks):{RESET}
+  %(prog)s gate save my-project              # Bookmark current session
+  %(prog)s gate list                         # Show all bookmarks
+  %(prog)s gate jump my-project              # Get continue command
+
+{BOLD}Techs (Workflow Automation):{RESET}
+  %(prog)s tech list                         # Show available workflows
+  %(prog)s tech fire                         # Build project
+  %(prog)s tech antipode                     # Build + Test
+
+{BOLD}Lavos (Project Health):{RESET}
+  %(prog)s lavos                             # Full project scan
+  %(prog)s lavos quick                       # Critical issues only
+
+{BOLD}Git Time Machine:{RESET}
+  %(prog)s git                               # Git status with era info
+  %(prog)s git log                           # Commit history by era
         """
     )
 
@@ -678,6 +707,52 @@ def main():
         parts = query_str.split()
         output_path = parts[1] if len(parts) > 1 else None
         export_command(output_path)
+        return
+
+    # Handle 'index' subcommand - Run indexer
+    if query_str.lower().startswith("index"):
+        parts = query_str.split()
+        reindex = "--reindex" in parts or "-r" in parts
+        from indexer import SessionIndexer
+        indexer = SessionIndexer()
+        indexer.index_all(reindex=reindex)
+        return
+
+    # Handle 'gate' subcommand - Time gates (forward to gates.py)
+    if query_str.lower().startswith("gate"):
+        import gates
+        # Pass remaining args to gates module
+        parts = query_str.split(None, 1)
+        gate_args = parts[1] if len(parts) > 1 else ""
+        sys.argv = ["gate"] + gate_args.split()
+        gates.main()
+        return
+
+    # Handle 'tech' subcommand - Workflow automation (forward to techs.py)
+    if query_str.lower().startswith("tech"):
+        import techs
+        parts = query_str.split(None, 1)
+        tech_args = parts[1] if len(parts) > 1 else ""
+        sys.argv = ["tech"] + tech_args.split()
+        techs.main()
+        return
+
+    # Handle 'lavos' subcommand - Project health
+    if query_str.lower().startswith("lavos"):
+        import lavos
+        parts = query_str.split(None, 1)
+        lavos_args = parts[1] if len(parts) > 1 else ""
+        sys.argv = ["lavos"] + lavos_args.split()
+        lavos.main()
+        return
+
+    # Handle 'git' subcommand - Git time machine (forward to epoch.py)
+    if query_str.lower().startswith("git"):
+        import epoch
+        parts = query_str.split(None, 1)
+        git_args = parts[1] if len(parts) > 1 else ""
+        sys.argv = ["egit"] + git_args.split()
+        epoch.main()
         return
 
     # If no query, show interactive welcome menu

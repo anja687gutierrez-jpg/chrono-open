@@ -28,9 +28,10 @@ from chrono_utils import (
     END_OF_TIME, RESET, BOLD, DIM,
     classify_era, format_timestamp_relative
 )
+from chrono_config import get_gates_path
 
-# Storage location
-GATES_FILE = Path.home() / ".smart-forking" / "gates.json"
+# Storage location (uses chrono_config for path)
+GATES_FILE = get_gates_path()
 
 
 def load_gates() -> Dict[str, Any]:

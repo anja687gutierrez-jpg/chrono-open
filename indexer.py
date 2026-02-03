@@ -1,12 +1,18 @@
 """
-Session Indexer
+Session Indexer (Chrono)
 Indexes all Claude Code sessions into the vector database.
 
 Run this to build your initial semantic search index:
-    python indexer.py
+    chrono index
 
 Run with --reindex to rebuild from scratch:
-    python indexer.py --reindex
+    chrono index --reindex
+
+Features:
+- Skips active sessions (being written to)
+- Warns about duplicate sessions in multiple terminals
+- Classifies projects based on content, not just path
+- Verifies chunks before marking as indexed
 """
 
 import json
@@ -18,20 +24,43 @@ from typing import Set, Optional
 from session_parser import find_all_sessions, chunk_session, get_session_info
 from embedding_service import EmbeddingService
 from vector_store import SessionVectorStore
+from session_utils import (
+    get_active_session_ids,
+    warn_duplicate_sessions,
+    is_session_active
+)
+from project_classifier import classify_session, KNOWN_PROJECTS
+from session_exploder import extract_files_and_tools, parse_raw_session
 
 
 class SessionIndexer:
     """Indexes Claude Code sessions for semantic search."""
-    
+
     def __init__(self, claude_dir: Optional[Path] = None):
         self.claude_dir = claude_dir or (Path.home() / ".claude")
-        self.config_dir = Path.home() / ".smart-forking"
+
+        # Support both old and new config dirs (migration)
+        new_config = Path.home() / ".chrono"
+        old_config = Path.home() / ".smart-forking"
+
+        # Use new dir if it exists, or old dir if it exists, otherwise create new
+        if new_config.exists():
+            self.config_dir = new_config
+        elif old_config.exists():
+            self.config_dir = old_config
+        else:
+            self.config_dir = new_config
+
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.indexed_file = self.config_dir / "indexed_sessions.json"
-        
+        self.verified_file = self.config_dir / "verified_sessions.json"  # NEW: tracks verified indexing
+
         self.embedder = EmbeddingService()
         self.store = SessionVectorStore()
+
+        # Track active sessions
+        self.active_sessions = get_active_session_ids()
     
     def get_indexed_sessions(self) -> Set[str]:
         """Load the set of already indexed session IDs."""
@@ -72,58 +101,109 @@ class SessionIndexer:
     
     def index_session(self, session_path: Path, force: bool = False) -> int:
         """
-        Index a single session.
-        
+        Index a single session with proper project classification.
+
         Args:
             session_path: Path to the session JSONL file
             force: If True, reindex even if already indexed
-            
+
         Returns:
-            Number of chunks indexed
+            Number of chunks indexed (0 if skipped or failed)
         """
         session_id = session_path.stem
-        
+
+        # Skip active sessions (being written to)
+        if session_id in self.active_sessions:
+            print(f"    ⏭ Skipping active session")
+            return -1  # Special code for "skipped"
+
         # Parse into chunks
         chunks = chunk_session(session_path)
-        
+
         if not chunks:
             return 0
-        
+
+        # Classify project based on content, not just path
+        original_project = chunks[0].project if chunks else "unknown"
+
+        # Get files touched for better classification
+        messages = parse_raw_session(session_path)
+        files_touched, _ = extract_files_and_tools(messages)
+        all_files = set()
+        for action_files in files_touched.values():
+            all_files.update(action_files)
+
+        # Get or generate summary
+        from summary_store import SummaryStore
+        summary_store = SummaryStore()
+        summary = summary_store.get(session_id) or ""
+
+        # Classify the session
+        classification = classify_session(
+            session_id=session_id,
+            summary=summary,
+            files_touched=all_files,
+            original_project=original_project
+        )
+
+        # Update chunks with correct project name
+        detected_project = classification.detected_project
+        for chunk in chunks:
+            chunk.project = detected_project
+
         # Generate embeddings
         texts = [c.content for c in chunks]
         embeddings = self.embedder.embed_batch(texts, show_progress=False)
-        
+
         # Store in vector database
         added = self.store.add_chunks(chunks, embeddings)
-        
+
+        # Verify chunks were actually added
+        if added > 0:
+            # Quick verification: check if session exists in store
+            stored_count = self.store.count_session_chunks(session_id)
+            if stored_count < added:
+                print(f"    ⚠ Verification failed: expected {added}, found {stored_count}")
+                return 0  # Don't mark as indexed
+
         return added
     
     def index_all(
-        self, 
+        self,
         reindex: bool = False,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        skip_active: bool = True
     ) -> dict:
         """
         Index all Claude Code sessions.
-        
+
         Args:
             reindex: If True, reindex everything from scratch
             limit: Maximum number of sessions to index (for testing)
-            
+            skip_active: If True, skip sessions currently being written (default)
+
         Returns:
             Statistics about the indexing run
         """
         start_time = datetime.now()
-        
+
         if not self.check_dependencies():
             return {"error": "Dependency check failed"}
-        
+
+        # Warn about duplicate sessions
+        warn_duplicate_sessions()
+
+        # Refresh active session list
+        self.active_sessions = get_active_session_ids()
+        if self.active_sessions and skip_active:
+            print(f"\n⏭ Will skip {len(self.active_sessions)} active session(s)")
+
         # Find all sessions
         all_sessions = find_all_sessions(self.claude_dir)
-        
+
         if limit:
             all_sessions = all_sessions[:limit]
-        
+
         print(f"\nFound {len(all_sessions)} session files")
         
         # Get already indexed
@@ -152,30 +232,34 @@ class SessionIndexer:
         print("\n" + "=" * 60)
         print("Indexing Sessions")
         print("=" * 60)
-        
+
         total_chunks = 0
         successful = 0
         failed = 0
-        
+        skipped = 0
+
         for i, session_path in enumerate(new_sessions, 1):
             session_id = session_path.stem
             info = get_session_info(session_path)
             project_name = info.project if info else "unknown"
-            
+
             print(f"\n[{i}/{len(new_sessions)}] {session_id[:12]}...")
             print(f"    Project: {project_name}")
-            
+
             try:
                 chunks_added = self.index_session(session_path)
-                
-                if chunks_added > 0:
+
+                if chunks_added == -1:
+                    # Skipped (active session)
+                    skipped += 1
+                elif chunks_added > 0:
                     indexed.add(session_id)
                     total_chunks += chunks_added
                     successful += 1
                     print(f"    ✓ Indexed {chunks_added} chunks")
                 else:
                     print(f"    - No content to index")
-                    
+
             except Exception as e:
                 failed += 1
                 print(f"    ✗ Error: {e}")
@@ -189,25 +273,28 @@ class SessionIndexer:
         print("\n" + "=" * 60)
         print("Indexing Complete")
         print("=" * 60)
-        
+
         stats = self.store.get_stats()
-        
+
         summary = {
             "sessions_found": len(all_sessions),
             "sessions_indexed": successful,
+            "sessions_skipped": skipped,
             "sessions_failed": failed,
             "chunks_added": total_chunks,
             "total_chunks_in_db": stats.get("total_chunks", 0),
             "total_sessions_in_db": stats.get("unique_sessions", 0),
             "duration_seconds": round(duration, 1)
         }
-        
+
         print(f"\nSessions indexed: {successful}")
+        if skipped > 0:
+            print(f"Sessions skipped (active): {skipped}")
         print(f"Sessions failed: {failed}")
         print(f"Chunks added: {total_chunks}")
         print(f"Total in database: {stats.get('total_chunks', 0)} chunks")
         print(f"Time elapsed: {duration:.1f} seconds")
-        
+
         return summary
 
 

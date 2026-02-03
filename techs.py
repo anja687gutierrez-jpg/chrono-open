@@ -325,7 +325,8 @@ TRIPLE_TECHS = {
 }
 
 # Custom techs storage
-CUSTOM_TECHS_FILE = Path.home() / ".smart-forking" / "techs.json"
+from chrono_config import get_techs_path
+CUSTOM_TECHS_FILE = get_techs_path()
 
 
 # ============================================================
@@ -400,7 +401,7 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
 
         # Warn if no project detected
         if is_fallback and project_type == "default":
-            print(f"  \033[93m⚠ No project detected in this directory{RESET}")
+            print(f"  \033[38;5;208m⚠ No project detected in this directory{RESET}")  # Orange
             print(f"  {DIM}Looking for: package.json, pyproject.toml, Cargo.toml, go.mod{RESET}")
 
         if verbose or dry_run:

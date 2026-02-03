@@ -24,9 +24,10 @@ def generate_summaries(
     verbose: bool = True
 ):
     """Generate AI summaries for sessions."""
+    from chrono_config import get_data_dir, get_indexed_sessions_path
 
-    config_dir = Path.home() / ".smart-forking"
-    indexed_file = config_dir / "indexed_sessions.json"
+    config_dir = get_data_dir()
+    indexed_file = get_indexed_sessions_path()
 
     # Get indexed sessions
     if indexed_file.exists():

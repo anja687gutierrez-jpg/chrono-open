@@ -329,9 +329,9 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
         DIM = "\033[2m"
         CYAN = "\033[96m"
         GREEN = "\033[92m"
-        YELLOW = "\033[93m"
+        YELLOW = "\033[94m"  # Blue (visible on light backgrounds)
         MAGENTA = "\033[95m"
-        WHITE = "\033[97m"
+        WHITE = "\033[90m"  # Dark gray (visible on light backgrounds)
     else:
         RESET = BOLD = DIM = CYAN = GREEN = YELLOW = MAGENTA = WHITE = ""
 

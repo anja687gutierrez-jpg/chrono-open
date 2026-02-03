@@ -124,7 +124,7 @@ def format_similar_sessions(
     if use_color:
         CYAN = "\033[96m"
         GREEN = "\033[92m"
-        YELLOW = "\033[93m"
+        YELLOW = "\033[94m"  # Blue (visible on light backgrounds)
     else:
         CYAN = GREEN = YELLOW = ""
 

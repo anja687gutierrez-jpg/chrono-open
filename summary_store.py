@@ -1,7 +1,8 @@
 """
 Summary Store - Persistent storage for AI-generated session summaries
 
-Stores summaries in ~/.smart-forking/summaries.json
+Stores summaries in ~/.chrono/summaries.json
+(Legacy: ~/.smart-forking/summaries.json also supported)
 """
 
 import json
@@ -9,12 +10,17 @@ from pathlib import Path
 from typing import Optional, Dict
 from datetime import datetime
 
+from chrono_config import get_summaries_path
+
 
 class SummaryStore:
     """Stores and retrieves AI-generated session summaries."""
 
-    def __init__(self, store_path: str = "~/.smart-forking/summaries.json"):
-        self.store_path = Path(store_path).expanduser()
+    def __init__(self, store_path: str = None):
+        if store_path:
+            self.store_path = Path(store_path).expanduser()
+        else:
+            self.store_path = get_summaries_path()
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache = None
 

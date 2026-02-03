@@ -51,10 +51,10 @@ class Issue:
 
 
 SEVERITY_COLORS = {
-    "critical": "\033[91m",  # Red
-    "high": "\033[93m",      # Yellow
-    "medium": "\033[95m",    # Magenta
-    "low": "\033[96m",       # Cyan
+    "critical": "\033[91m",      # Red
+    "high": "\033[38;5;208m",    # Orange (visible on light backgrounds)
+    "medium": "\033[95m",        # Magenta
+    "low": "\033[96m",           # Cyan
 }
 
 SEVERITY_EMOJI = {
