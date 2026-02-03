@@ -40,11 +40,11 @@ KNOWN_PROJECTS = {
         "emoji": "🏢",
         "description": "Operations management portal (sandbox)"
     },
-    "Smart-Forking": {
-        "keywords": ["smart-forking", "chrono", "fork", "embedding", "vector", "session", "epoch", "lavos", "techs.py"],
-        "file_patterns": ["smart-forking", "chrono", "fork_detect"],
-        "emoji": "🔀",
-        "description": "Session search and time-travel toolkit"
+    "Chrono": {
+        "keywords": ["chrono", "smart-forking", "fork", "embedding", "vector", "session", "epoch", "lavos", "techs.py"],
+        "file_patterns": ["chrono", "smart-forking", "fork_detect"],
+        "emoji": "🕰️",
+        "description": "Time-travel development toolkit"
     },
     "Tour-Planner": {
         "keywords": ["pathfinding", "tour", "route", "trip", "iconic", "pathways", "ralph", "abenteuer"],
