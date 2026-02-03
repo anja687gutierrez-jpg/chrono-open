@@ -351,6 +351,74 @@ class SessionVectorStore:
         except:
             return set()
 
+    def remove_session(self, session_id: str) -> int:
+        """Remove all chunks for a session from ChromaDB. Alias for delete_session."""
+        return self.delete_session(session_id)
+
+    def get_all_session_ids(self) -> set:
+        """Get all session IDs in ChromaDB. Alias for get_indexed_session_ids."""
+        return self.get_indexed_session_ids()
+
+    def search_text(
+        self,
+        query_text: str,
+        n_results: int = 20,
+        project_filter: Optional[str] = None
+    ) -> List[SearchResult]:
+        """
+        Full-text search using ChromaDB's where_document $contains.
+
+        Finds exact substring matches in indexed documents, complementing
+        the semantic vector search for queries like file names or identifiers.
+
+        Args:
+            query_text: The exact text to search for
+            n_results: Maximum number of results
+            project_filter: Optional project name to filter by
+
+        Returns:
+            List of SearchResult objects with a fixed high score (85)
+        """
+        if not query_text:
+            return []
+
+        where_doc = {"$contains": query_text}
+
+        where_filter = None
+        if project_filter:
+            where_filter = {"project": {"$eq": project_filter}}
+
+        try:
+            results = self.collection.get(
+                where_document=where_doc,
+                where=where_filter,
+                limit=n_results,
+                include=["documents", "metadatas"]
+            )
+        except Exception as e:
+            print(f"Text search error: {e}")
+            return []
+
+        if not results or not results.get("ids"):
+            return []
+
+        search_results = []
+        for i in range(len(results["ids"])):
+            metadata = results["metadatas"][i] if results.get("metadatas") else {}
+            document = results["documents"][i] if results.get("documents") else ""
+
+            search_results.append(SearchResult(
+                session_id=metadata.get("session_id", ""),
+                project=metadata.get("project", ""),
+                score=85,  # Fixed high score for exact text matches
+                preview=metadata.get("preview", "")[:200],
+                chunk_index=metadata.get("chunk_index", 0),
+                timestamp=metadata.get("timestamp"),
+                content=document[:500] if document else ""
+            ))
+
+        return search_results
+
     def search_with_exclusions(
         self,
         query_embedding: List[float],

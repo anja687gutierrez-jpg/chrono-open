@@ -91,10 +91,30 @@ def get_message_text(msg: dict) -> tuple:
         return role, text
     return "", ""
 
-def chunk_session(path: Path, max_chunk_chars: int = 5000) -> List[SessionChunk]:
+def chunk_session(path: Path, max_chunk_chars: int = 5000, max_messages: int = 500) -> List[SessionChunk]:
     session_id = path.stem
     project = extract_project_name(path)
-    messages = list(parse_jsonl_file(path))
+
+    # Size-aware: limit messages for large files to prevent OOM
+    try:
+        file_size_mb = path.stat().st_size / (1024 * 1024)
+    except OSError:
+        file_size_mb = 0
+
+    if file_size_mb > 200:
+        max_messages = min(max_messages, 200)
+        print(f"    ⚠ Large session ({file_size_mb:.0f}MB), indexing first {max_messages} messages")
+    elif file_size_mb > 100:
+        max_messages = min(max_messages, 300)
+        print(f"    ⚠ Large session ({file_size_mb:.0f}MB), indexing first {max_messages} messages")
+
+    # Collect messages up to the limit instead of loading all at once
+    messages = []
+    for msg in parse_jsonl_file(path):
+        messages.append(msg)
+        if len(messages) >= max_messages:
+            break
+
     if not messages:
         return []
     chunks = []

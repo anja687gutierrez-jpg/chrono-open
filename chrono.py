@@ -108,8 +108,33 @@ def find_sessions_chrono(
     # Embed the query
     query_embedding = embedder.embed(query)
 
-    # Search for similar sessions (get more for filtering)
+    # 1. Vector (semantic) search
     sessions = store.search_sessions(query_embedding, n_sessions=top_k * 5)
+
+    # 2. Full-text search fallback (finds exact string matches)
+    text_results = store.search_text(query, n_results=top_k * 5, project_filter=project_filter)
+
+    # Aggregate text results by session (same as search_sessions logic)
+    text_session_map = {}
+    for r in text_results:
+        sid = r.session_id
+        if sid not in text_session_map or r.score > text_session_map[sid]["score"]:
+            text_session_map[sid] = {
+                "session_id": sid,
+                "project": r.project,
+                "score": r.score,
+                "preview": r.preview,
+                "timestamp": r.timestamp,
+                "best_chunk": r.chunk_index
+            }
+
+    # 3. Merge: deduplicate by session_id, keeping highest score
+    session_map = {s["session_id"]: s for s in sessions}
+    for sid, text_session in text_session_map.items():
+        if sid not in session_map or text_session["score"] > session_map[sid].get("score", 0):
+            session_map[sid] = text_session
+
+    sessions = sorted(session_map.values(), key=lambda x: x.get("score", 0), reverse=True)
 
     # Filter out active sessions first
     if active_sessions:
@@ -713,9 +738,15 @@ def main():
     if query_str.lower().startswith("index"):
         parts = query_str.split()
         reindex = "--reindex" in parts or "-r" in parts
+        # Check for single session ID (e.g., "chrono index 4717c89a")
+        single_session = None
+        for part in parts[1:]:
+            if part not in ("--reindex", "-r") and not part.startswith("-"):
+                single_session = part
+                break
         from indexer import SessionIndexer
         indexer = SessionIndexer()
-        indexer.index_all(reindex=reindex)
+        indexer.index_all(reindex=reindex, single_session=single_session)
         return
 
     # Handle 'gate' subcommand - Time gates (forward to gates.py)
@@ -744,6 +775,47 @@ def main():
         lavos_args = parts[1] if len(parts) > 1 else ""
         sys.argv = ["lavos"] + lavos_args.split()
         lavos.main()
+        return
+
+    # Handle 'cleanup' subcommand - Remove stale sessions from ChromaDB
+    if query_str.lower().startswith("cleanup"):
+        print(f"\n{BOLD}🧹 Chrono Cleanup - Removing Stale Sessions{RESET}\n")
+        store = SessionVectorStore()
+        indexed_ids = store.get_all_session_ids()
+        print(f"  Sessions in ChromaDB: {len(indexed_ids)}")
+
+        # Find all actual session files
+        claude_dir = Path.home() / ".claude"
+        from session_parser import find_all_sessions
+        existing_files = find_all_sessions(claude_dir)
+        existing_ids = {p.stem for p in existing_files}
+        print(f"  Session files on disk: {len(existing_ids)}")
+
+        # Find orphans (in ChromaDB but no file on disk)
+        orphans = indexed_ids - existing_ids
+        if not orphans:
+            print(f"\n  {BOLD}✅ No stale entries found. Index is clean.{RESET}\n")
+            return
+
+        print(f"\n  Found {len(orphans)} stale session(s):")
+        for oid in sorted(orphans):
+            print(f"    - {oid[:12]}...")
+
+        # Remove orphans
+        total_removed = 0
+        for oid in orphans:
+            removed = store.remove_session(oid)
+            total_removed += removed
+            print(f"    🗑 Removed {oid[:12]}... ({removed} chunks)")
+
+        # Update index cache
+        from indexer import SessionIndexer
+        indexer = SessionIndexer()
+        current_indexed = indexer.get_indexed_sessions()
+        current_indexed -= orphans
+        indexer.save_indexed_sessions(current_indexed)
+
+        print(f"\n  {BOLD}✅ Cleanup complete: removed {len(orphans)} sessions ({total_removed} chunks){RESET}\n")
         return
 
     # Handle 'git' subcommand - Git time machine (forward to epoch.py)

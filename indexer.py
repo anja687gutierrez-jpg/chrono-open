@@ -133,8 +133,20 @@ class SessionIndexer:
             print(f"    ⏭ Skipping active session")
             return -1  # Special code for "skipped"
 
-        # Parse into chunks
-        chunks = chunk_session(session_path)
+        # Log file size
+        try:
+            file_size_mb = session_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > 50:
+                print(f"    📏 File size: {file_size_mb:.1f}MB")
+        except OSError:
+            pass
+
+        # Parse into chunks (size-aware: chunk_session handles large files)
+        try:
+            chunks = chunk_session(session_path)
+        except MemoryError:
+            print(f"    ⚠ MemoryError - session too large, skipping")
+            return 0
 
         if not chunks:
             return 0
@@ -188,7 +200,8 @@ class SessionIndexer:
         self,
         reindex: bool = False,
         limit: Optional[int] = None,
-        skip_active: bool = True
+        skip_active: bool = True,
+        single_session: Optional[str] = None
     ) -> dict:
         """
         Index all Claude Code sessions.
@@ -197,6 +210,7 @@ class SessionIndexer:
             reindex: If True, reindex everything from scratch
             limit: Maximum number of sessions to index (for testing)
             skip_active: If True, skip sessions currently being written (default)
+            single_session: If set, only index the session matching this ID prefix
 
         Returns:
             Statistics about the indexing run
@@ -217,20 +231,41 @@ class SessionIndexer:
         # Find all sessions
         all_sessions = find_all_sessions(self.claude_dir)
 
+        # Single-session mode: filter to matching session and force re-index
+        if single_session:
+            matched = [s for s in all_sessions if s.stem.startswith(single_session) or single_session in s.stem]
+            if not matched:
+                print(f"\n⚠ No session found matching: {single_session}")
+                print(f"  Try using the first 8 characters of the session ID")
+                return {"error": f"No session matching '{single_session}'"}
+            all_sessions = matched
+            print(f"\n🎯 Single-session mode: found {len(matched)} match(es)")
+            # Force re-index for single session
+            reindex = True
+
         if limit:
             all_sessions = all_sessions[:limit]
 
         print(f"\nFound {len(all_sessions)} session files")
-        
+
         # Get already indexed
         if reindex:
             indexed = set()
-            print("Reindexing all sessions from scratch...")
-            self.store.reset()
+            if not single_session:
+                print("Reindexing all sessions from scratch...")
+                self.store.reset()
+            else:
+                # For single session, just remove that session's chunks
+                for s in all_sessions:
+                    self.store.delete_session(s.stem)
+                indexed = self.get_indexed_sessions()
+                # Remove the target session(s) from indexed set
+                for s in all_sessions:
+                    indexed.discard(s.stem)
         else:
             indexed = self.get_indexed_sessions()
             print(f"Already indexed: {len(indexed)} sessions")
-        
+
         # Filter to new sessions
         new_sessions = [s for s in all_sessions if s.stem not in indexed]
         print(f"New sessions to index: {len(new_sessions)}")

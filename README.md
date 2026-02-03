@@ -163,10 +163,16 @@ chrono "query" -i
 
 ```bash
 # Index all new sessions
-python indexer.py
+chrono index
 
 # Reindex everything from scratch
-python indexer.py --reindex
+chrono index --reindex
+
+# Index a single session by ID (supports short IDs)
+chrono index 4717c89a
+
+# Remove stale entries (sessions deleted from disk but still in ChromaDB)
+chrono cleanup
 
 # Show stats only
 python indexer.py --stats
@@ -174,6 +180,10 @@ python indexer.py --stats
 # Test with limited sessions
 python indexer.py --limit 10
 ```
+
+**Size-Aware Indexing:** Sessions larger than 100MB are automatically truncated (first 300 messages for 100-200MB, first 200 for >200MB) to prevent out-of-memory crashes.
+
+**Hybrid Search:** Search now combines semantic (vector) results with full-text matching. Queries like `chrono "detailModal.js"` will find exact string matches even when embeddings don't capture them.
 
 ### Fork Detect (Original - Still Works)
 
@@ -326,9 +336,18 @@ For 100+ sessions, initial indexing may take 5-10 minutes.
 
 ### Search results not relevant
 
-- Try different search queries
+- Try different search queries (exact file names and identifiers now work via full-text fallback)
 - Make sure you've indexed recent sessions
 - Check that your sessions have meaningful content (not just quick fixes)
+- Run `chrono cleanup` to remove stale entries from deleted sessions
+
+### Large sessions crashing the indexer
+
+Sessions >100MB are automatically truncated during indexing. If a session still causes a MemoryError, it will be skipped gracefully. You can re-index a single session with:
+
+```bash
+chrono index <session-id>
+```
 
 ## Time Gates - Session Bookmarking (Phase 2 ✅)
 
