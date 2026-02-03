@@ -18,8 +18,12 @@ Time Gates, Epoch navigation, and Techs coming in future phases!
 import sys
 import argparse
 import json
+import warnings
 from typing import List, Dict, Optional
 from datetime import datetime
+
+# Suppress urllib3 NotOpenSSLWarning (noisy on macOS with LibreSSL)
+warnings.filterwarnings("ignore", message=".*urllib3.*OpenSSL.*")
 
 from embedding_service import EmbeddingService
 from vector_store import SessionVectorStore
@@ -533,10 +537,53 @@ def interactive_mode_chrono(query: str, sessions: List[Dict]):
 
 
 # ============================================================
+# Error Handling Helpers
+# ============================================================
+
+def _is_ollama_connection_error(exc: Exception) -> bool:
+    """Check if an exception is caused by Ollama not running."""
+    err_str = str(exc).lower()
+    if isinstance(exc, ConnectionError) or isinstance(exc, ConnectionRefusedError):
+        return True
+    if "connection refused" in err_str or "connect call failed" in err_str:
+        return True
+    if "ollama" in err_str and ("refused" in err_str or "failed" in err_str or "unavailable" in err_str):
+        return True
+    # RuntimeError wrapping ConnectionError from embedding_service
+    if isinstance(exc, RuntimeError) and "embedding failed" in err_str:
+        return True
+    return False
+
+
+# ============================================================
 # Main CLI
 # ============================================================
 
 def main():
+    try:
+        _main_inner()
+    except KeyboardInterrupt:
+        print(f"\n  {DIM}Time travel cancelled{RESET}")
+        sys.exit(0)
+    except ImportError as e:
+        pkg = str(e).replace("No module named ", "").strip("'\"")
+        print(f"\n{BOLD}⚠ Missing dependency:{RESET} {pkg}")
+        print(f"  Run: pip install {pkg}")
+        sys.exit(1)
+    except Exception as e:
+        if _is_ollama_connection_error(e):
+            print(f"\n{BOLD}⚠ Cannot connect to Ollama{RESET}")
+            print(f"  Ollama is required for semantic search embeddings.")
+            print(f"  Start it with: ollama serve")
+            print(f"  Then retry your command.\n")
+            sys.exit(1)
+        # Unexpected error — show one-line message, not full traceback
+        print(f"\n{BOLD}⚠ Error:{RESET} {e}")
+        print(f"  {DIM}Run 'chrono --help' for usage info{RESET}\n")
+        sys.exit(1)
+
+
+def _main_inner():
     parser = argparse.ArgumentParser(
         description="Project Epoch - Time-travel through your Claude Code sessions",
         formatter_class=argparse.RawDescriptionHelpFormatter,

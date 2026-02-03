@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict
 from datetime import datetime
 
-from chrono_config import get_summaries_path
+from chrono_config import get_summaries_path, atomic_write_json, safe_load_json
 
 
 class SummaryStore:
@@ -25,27 +25,26 @@ class SummaryStore:
         self._cache = None
 
     def _load(self) -> Dict:
-        """Load summaries from disk."""
+        """Load summaries from disk (corruption-safe)."""
         if self._cache is not None:
             return self._cache
 
-        if self.store_path.exists():
-            try:
-                with open(self.store_path) as f:
-                    self._cache = json.load(f)
-            except:
-                self._cache = {"summaries": {}, "updated": None}
-        else:
-            self._cache = {"summaries": {}, "updated": None}
+        default = {"summaries": {}, "updated": None}
+        self._cache = safe_load_json(self.store_path, default=default)
+        if self._cache is None:
+            self._cache = default
+
+        # Ensure structure
+        if "summaries" not in self._cache:
+            self._cache = default
 
         return self._cache
 
     def _save(self):
-        """Save summaries to disk."""
+        """Save summaries to disk (atomic write)."""
         if self._cache:
             self._cache["updated"] = datetime.now().isoformat()
-            with open(self.store_path, "w") as f:
-                json.dump(self._cache, f, indent=2)
+            atomic_write_json(self.store_path, self._cache)
 
     def get(self, session_id: str) -> Optional[str]:
         """Get summary for a session."""

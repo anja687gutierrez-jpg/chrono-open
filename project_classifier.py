@@ -103,26 +103,19 @@ class SessionProject:
 # Pinned Projects Storage
 # ============================================================
 
-from chrono_config import get_pinned_projects_path
+from chrono_config import get_pinned_projects_path, atomic_write_json, safe_load_json
 PINS_FILE = get_pinned_projects_path()
 
 
 def load_pinned_projects() -> Dict:
-    """Load pinned projects from storage."""
-    if PINS_FILE.exists():
-        try:
-            with open(PINS_FILE) as f:
-                return json.load(f)
-        except:
-            pass
-    return {"pinned": [], "earmarked_sessions": {}}
+    """Load pinned projects from storage (corruption-safe)."""
+    default = {"pinned": [], "earmarked_sessions": {}}
+    return safe_load_json(PINS_FILE, default=default) or default
 
 
 def save_pinned_projects(data: Dict):
-    """Save pinned projects to storage."""
-    PINS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(PINS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    """Save pinned projects to storage (atomic write)."""
+    atomic_write_json(PINS_FILE, data)
 
 
 def pin_project(project_name: str):

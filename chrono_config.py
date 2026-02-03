@@ -6,9 +6,11 @@ Handles migration from legacy ~/.smart-forking to ~/.chrono
 """
 
 from pathlib import Path
+import os
+import tempfile
 import shutil
 import json
-from typing import Optional
+from typing import Optional, Any
 
 
 # ============================================================
@@ -109,6 +111,88 @@ def get_indexed_sessions_path() -> Path:
 def get_pinned_projects_path() -> Path:
     """Get path to pinned projects file."""
     return get_data_dir() / "pinned_projects.json"
+
+
+# ============================================================
+# Safe File I/O
+# ============================================================
+
+def atomic_write_json(path: Path, data: Any, **kwargs) -> None:
+    """
+    Atomically write JSON data to a file.
+
+    Writes to a temporary file in the same directory first, then renames
+    to the target path. This prevents half-written/corrupt files if the
+    process is killed mid-write (e.g., terminal close during auto-index).
+
+    os.rename() is atomic on POSIX systems when source and destination
+    are on the same filesystem — which is guaranteed because we create
+    the temp file in the same directory.
+
+    Args:
+        path: Target file path
+        data: JSON-serializable data
+        **kwargs: Extra keyword arguments passed to json.dump
+                  (e.g., indent=2, default=str)
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Default to pretty-printed JSON
+    kwargs.setdefault("indent", 2)
+
+    # Write to temp file in the same directory (ensures same filesystem)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent),
+        prefix=".tmp_",
+        suffix=".json"
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, **kwargs)
+            f.flush()
+            os.fsync(f.fileno())  # Force write to disk
+        # Atomic rename (POSIX guarantees this won't leave a partial file)
+        os.rename(tmp_path, str(path))
+    except BaseException:
+        # Clean up temp file on any failure (including KeyboardInterrupt)
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def safe_load_json(path: Path, default: Any = None) -> Any:
+    """
+    Safely load a JSON file, returning a default on any error.
+
+    Handles: missing file, empty file, corrupted JSON, permission errors.
+    Prints a warning if the file exists but can't be parsed.
+
+    Args:
+        path: Path to JSON file
+        default: Value to return on failure (default: None)
+
+    Returns:
+        Parsed JSON data, or default on any error
+    """
+    path = Path(path)
+    if not path.exists():
+        return default
+
+    try:
+        with open(path) as f:
+            content = f.read()
+            if not content.strip():
+                return default
+            return json.loads(content)
+    except json.JSONDecodeError:
+        print(f"  ⚠ Warning: {path.name} is corrupted — treating as empty")
+        return default
+    except (IOError, OSError) as e:
+        print(f"  ⚠ Warning: Cannot read {path.name}: {e}")
+        return default
 
 
 # ============================================================

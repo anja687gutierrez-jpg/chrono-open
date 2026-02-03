@@ -62,19 +62,48 @@ def extract_project_name(path: Path) -> str:
         return "-".join(project_parts[-3:]) if len(project_parts) > 3 else "-".join(project_parts)
     return project_dir[:30] if project_dir else "unknown"
 
-def parse_jsonl_file(path: Path) -> Generator[dict, None, None]:
+def parse_jsonl_file(path: Path, skip_types: Optional[set] = None) -> Generator[dict, None, None]:
+    """
+    Parse a JSONL file, yielding each valid JSON object.
+
+    Args:
+        path: Path to the JSONL file
+        skip_types: Optional set of message "type" values to skip early
+                    (e.g. {"file-history-snapshot", "summary"})
+    """
+    # 10MB line limit — lines bigger than this are likely binary or corrupt
+    MAX_LINE_BYTES = 10 * 1024 * 1024
+
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
+                # Guard against extremely long lines
+                if len(line) > MAX_LINE_BYTES:
+                    continue
+
                 line = line.strip()
                 if not line:
                     continue
+
                 try:
-                    yield json.loads(line)
+                    obj = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+
+                if not isinstance(obj, dict):
+                    continue
+
+                # Early skip of non-message types at the iterator level
+                if skip_types:
+                    msg_type = obj.get("type", "")
+                    if msg_type in skip_types:
+                        continue
+
+                yield obj
+    except (IOError, OSError) as e:
+        print(f"  ⚠ Cannot read {path.name}: {e}")
     except Exception as e:
-        print(f"  Error reading {path}: {e}")
+        print(f"  ⚠ Error parsing {path.name}: {e}")
 
 def get_message_text(msg: dict) -> tuple:
     msg_type = msg.get("type", "")
@@ -108,26 +137,32 @@ def chunk_session(path: Path, max_chunk_chars: int = 5000, max_messages: int = 5
         max_messages = min(max_messages, 300)
         print(f"    ⚠ Large session ({file_size_mb:.0f}MB), indexing first {max_messages} messages")
 
-    # Collect messages up to the limit instead of loading all at once
-    messages = []
-    for msg in parse_jsonl_file(path):
-        messages.append(msg)
-        if len(messages) >= max_messages:
-            break
+    # Skip types that have no semantic content — avoids accumulating
+    # large snapshot objects (100KB+) and noise messages in memory
+    _skip_types = {
+        "file-history-snapshot", "summary",
+        "progress", "queue-operation", "system",
+    }
 
-    if not messages:
-        return []
+    # Stream messages: extract text immediately and discard the raw dict.
+    # This prevents holding hundreds of large JSON objects in memory
+    # (some individual messages can be 10MB+ due to tool results).
     chunks = []
     current_chunk_parts = []
     current_chunk_size = 0
     chunk_index = 0
     first_timestamp = None
-    for msg in messages:
-        msg_type = msg.get("type", "")
-        if msg_type in ("file-history-snapshot", "summary"):
-            continue
+    msg_count = 0
+
+    for msg in parse_jsonl_file(path, skip_types=_skip_types):
+        msg_count += 1
+        if msg_count > max_messages:
+            break
+
         timestamp = msg.get("timestamp")
         role, text = get_message_text(msg)
+        # msg dict is no longer referenced after this point — GC can reclaim it
+
         if not text or not text.strip():
             continue
         text = text.strip()
@@ -149,29 +184,53 @@ def chunk_session(path: Path, max_chunk_chars: int = 5000, max_messages: int = 5
             first_timestamp = timestamp
         current_chunk_parts.append(formatted)
         current_chunk_size += formatted_size
+
     if current_chunk_parts:
         chunk_text = "\n\n".join(current_chunk_parts)
         chunks.append(SessionChunk(session_id=session_id, project=project, chunk_index=chunk_index, content=chunk_text, metadata={"timestamp": first_timestamp, "preview": chunk_text[:200], "char_count": len(chunk_text)}))
     return chunks
 
-def get_session_info(path: Path) -> Optional[SessionInfo]:
+def get_session_info(path: Path, max_messages: int = 500) -> Optional[SessionInfo]:
     session_id = path.stem
     project = extract_project_name(path)
-    messages = list(parse_jsonl_file(path))
-    if not messages:
-        return None
+    _skip_types = {
+        "file-history-snapshot", "summary",
+        "progress", "queue-operation", "system",
+    }
+
+    # Stream messages with a limit to prevent OOM on huge sessions.
+    # Extract only what we need (timestamps, user text) and discard dicts.
     timestamps = []
     user_messages = []
-    for msg in messages:
-        if ts := msg.get("timestamp"):
+    msg_count = 0
+
+    for msg in parse_jsonl_file(path, skip_types=_skip_types):
+        msg_count += 1
+        if msg_count > max_messages:
+            break
+        ts = msg.get("timestamp")
+        if ts:
             timestamps.append(ts)
         role, text = get_message_text(msg)
         if role == "user" and text:
-            user_messages.append(text)
+            user_messages.append(text[:500])  # Cap per-message text for topic extraction
+
+    if msg_count == 0:
+        return None
+
     preview = user_messages[0][:200] if user_messages else ""
     all_text = " ".join(user_messages)
     topics = extract_topics(all_text)
-    return SessionInfo(session_id=session_id, project=project, path=path, message_count=len(messages), first_timestamp=timestamps[0] if timestamps else None, last_timestamp=timestamps[-1] if timestamps else None, topics=topics[:5], preview=preview)
+    return SessionInfo(
+        session_id=session_id,
+        project=project,
+        path=path,
+        message_count=msg_count,
+        first_timestamp=timestamps[0] if timestamps else None,
+        last_timestamp=timestamps[-1] if timestamps else None,
+        topics=topics[:5],
+        preview=preview,
+    )
 
 def extract_topics(text: str) -> List[str]:
     patterns = [r'\b(React|Vue|Angular|TypeScript|JavaScript|Python|Node)\b', r'\b(API|REST|GraphQL|Firebase|Supabase|database)\b', r'\b(MagnusView|magnus|STAP|portal|dashboard)\b', r'\b(Tesla|rental|booking|tour)\b']

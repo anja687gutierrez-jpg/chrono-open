@@ -28,33 +28,27 @@ from chrono_utils import (
     END_OF_TIME, RESET, BOLD, DIM,
     classify_era, format_timestamp_relative
 )
-from chrono_config import get_gates_path
+from chrono_config import get_gates_path, atomic_write_json, safe_load_json
 
 # Storage location (uses chrono_config for path)
 GATES_FILE = get_gates_path()
 
 
 def load_gates() -> Dict[str, Any]:
-    """Load gates from storage."""
-    if not GATES_FILE.exists():
-        return {"gates": {}, "last_session": None}
-
-    try:
-        with open(GATES_FILE, "r") as f:
-            data = json.load(f)
-            # Ensure structure
-            if "gates" not in data:
-                data["gates"] = {}
-            return data
-    except (json.JSONDecodeError, IOError):
-        return {"gates": {}, "last_session": None}
+    """Load gates from storage (corruption-safe)."""
+    default = {"gates": {}, "last_session": None}
+    data = safe_load_json(GATES_FILE, default=default)
+    if data is None:
+        return default
+    # Ensure structure
+    if "gates" not in data:
+        data["gates"] = {}
+    return data
 
 
 def save_gates(data: Dict[str, Any]) -> None:
-    """Save gates to storage."""
-    GATES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(GATES_FILE, "w") as f:
-        json.dump(data, f, indent=2, default=str)
+    """Save gates to storage (atomic write)."""
+    atomic_write_json(GATES_FILE, data, default=str)
 
 
 def get_recent_session_id() -> Optional[str]:

@@ -325,7 +325,7 @@ TRIPLE_TECHS = {
 }
 
 # Custom techs storage
-from chrono_config import get_techs_path
+from chrono_config import get_techs_path, atomic_write_json, safe_load_json
 CUSTOM_TECHS_FILE = get_techs_path()
 
 
@@ -502,21 +502,13 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
 # ============================================================
 
 def load_custom_techs() -> Dict[str, Any]:
-    """Load custom techs from storage."""
-    if not CUSTOM_TECHS_FILE.exists():
-        return {}
-    try:
-        with open(CUSTOM_TECHS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
+    """Load custom techs from storage (corruption-safe)."""
+    return safe_load_json(CUSTOM_TECHS_FILE, default={}) or {}
 
 
 def save_custom_techs(techs: Dict[str, Any]) -> None:
-    """Save custom techs to storage."""
-    CUSTOM_TECHS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CUSTOM_TECHS_FILE, "w") as f:
-        json.dump(techs, f, indent=2)
+    """Save custom techs to storage (atomic write)."""
+    atomic_write_json(CUSTOM_TECHS_FILE, techs)
 
 
 def add_custom_tech(name: str, command: str, description: str = "") -> None:

@@ -17,9 +17,13 @@ Features:
 
 import json
 import argparse
+import warnings
 from pathlib import Path
 from datetime import datetime
 from typing import Set, Optional
+
+# Suppress urllib3 NotOpenSSLWarning (noisy on macOS with LibreSSL)
+warnings.filterwarnings("ignore", message=".*urllib3.*OpenSSL.*")
 
 from session_parser import find_all_sessions, chunk_session, get_session_info
 from embedding_service import EmbeddingService
@@ -31,6 +35,7 @@ from session_utils import (
 )
 from project_classifier import classify_session, KNOWN_PROJECTS
 from session_exploder import extract_files_and_tools, parse_raw_session
+from chrono_config import atomic_write_json, safe_load_json
 
 
 class SessionIndexer:
@@ -61,47 +66,104 @@ class SessionIndexer:
 
         # Track active sessions
         self.active_sessions = get_active_session_ids()
-    
+
     def get_indexed_sessions(self) -> Set[str]:
         """
         Get set of already indexed session IDs.
 
-        Uses ChromaDB as source of truth, with JSON file as cache.
-        If they disagree, ChromaDB wins and JSON is updated.
+        Merges ChromaDB (has chunks) with JSON cache (also tracks empty sessions).
+        Both sources are valid — ChromaDB tracks sessions with content,
+        the cache also remembers sessions that were scanned but had no content
+        (e.g. file-history-snapshot-only sessions).
         """
-        # Get from ChromaDB (source of truth)
+        # Get from ChromaDB (sessions with actual chunks)
         chromadb_sessions = self.store.get_indexed_session_ids()
 
-        # Get from cache file
+        # Get from cache file (includes empty sessions too)
         cache_sessions = set()
-        if self.indexed_file.exists():
-            try:
-                with open(self.indexed_file) as f:
-                    data = json.load(f)
-                cache_sessions = set(data.get("sessions", []))
-            except:
-                pass
+        cache_dirty = False
+        data = safe_load_json(self.indexed_file, default={"sessions": []})
+        if data:
+            # Filter out invalid entries (non-strings, empty strings)
+            raw = data.get("sessions", [])
+            cache_sessions = {s for s in raw if isinstance(s, str) and s.strip()}
+            if len(cache_sessions) != len(raw):
+                cache_dirty = True  # Had invalid entries
 
-        # If mismatch, sync cache to ChromaDB
-        if cache_sessions != chromadb_sessions:
-            print(f"  ℹ Syncing index cache (cache: {len(cache_sessions)}, ChromaDB: {len(chromadb_sessions)})")
-            self.save_indexed_sessions(chromadb_sessions)
+        # Union: a session is indexed if it's in either source
+        merged = chromadb_sessions | cache_sessions
 
-        return chromadb_sessions
-    
+        # Sync cache if drifted or had invalid entries
+        if merged != cache_sessions or cache_dirty:
+            if merged != cache_sessions:
+                print(f"  ℹ Syncing index cache (cache: {len(cache_sessions)}, ChromaDB: {len(chromadb_sessions)}, merged: {len(merged)})")
+            self.save_indexed_sessions(merged)
+
+        return merged
+
+    def verify_cache_integrity(self, verbose: bool = True) -> dict:
+        """
+        Compare ChromaDB session count vs JSON cache and report/heal drift.
+
+        Returns a dict with integrity status:
+          - chromadb_count: sessions with chunks in ChromaDB
+          - cache_count: sessions tracked in JSON cache
+          - only_in_chromadb: sessions in ChromaDB but missing from cache (drift)
+          - only_in_cache: sessions in cache but not ChromaDB (expected — empty sessions)
+          - healed: True if drift was detected and auto-healed
+        """
+        chromadb_sessions = self.store.get_indexed_session_ids()
+
+        cache_sessions = set()
+        data = safe_load_json(self.indexed_file, default={"sessions": []})
+        if data:
+            raw = data.get("sessions", [])
+            cache_sessions = {s for s in raw if isinstance(s, str) and s.strip()}
+
+        only_in_chromadb = chromadb_sessions - cache_sessions
+        only_in_cache = cache_sessions - chromadb_sessions
+
+        result = {
+            "chromadb_count": len(chromadb_sessions),
+            "cache_count": len(cache_sessions),
+            "only_in_chromadb": len(only_in_chromadb),
+            "only_in_cache": len(only_in_cache),
+            "healed": False,
+        }
+
+        if verbose and (only_in_chromadb or only_in_cache):
+            print(f"\n  Cache integrity check:")
+            print(f"    ChromaDB sessions: {len(chromadb_sessions)}")
+            print(f"    JSON cache sessions: {len(cache_sessions)}")
+            if only_in_cache:
+                print(f"    Only in cache (empty sessions): {len(only_in_cache)}")
+            if only_in_chromadb:
+                print(f"    ⚠ Only in ChromaDB (drift): {len(only_in_chromadb)}")
+
+        # Auto-heal: merge ChromaDB sessions into cache
+        if only_in_chromadb:
+            merged = chromadb_sessions | cache_sessions
+            self.save_indexed_sessions(merged)
+            result["healed"] = True
+            if verbose:
+                print(f"    ✓ Cache healed — synced {len(only_in_chromadb)} missing session(s)")
+
+        return result
+
     def save_indexed_sessions(self, sessions: Set[str]):
-        """Save the set of indexed session IDs."""
-        with open(self.indexed_file, "w") as f:
-            json.dump({
-                "sessions": list(sessions),
-                "last_updated": datetime.now().isoformat(),
-                "count": len(sessions)
-            }, f, indent=2)
-    
+        """Save the set of indexed session IDs (atomic write)."""
+        # Sanitize: only save non-empty string IDs
+        clean = sorted(s for s in sessions if isinstance(s, str) and s.strip())
+        atomic_write_json(self.indexed_file, {
+            "sessions": clean,
+            "last_updated": datetime.now().isoformat(),
+            "count": len(clean)
+        })
+
     def check_dependencies(self) -> bool:
         """Verify all dependencies are available."""
         print("Checking dependencies...")
-        
+
         # Check Ollama model
         if not self.embedder.check_model_available():
             print(f"  ⚠ Model {self.embedder.model} not found")
@@ -110,11 +172,11 @@ class SessionIndexer:
                 print("  ❌ Failed to pull model. Is Ollama running?")
                 print("     Run: ollama serve")
                 return False
-        
+
         print(f"  ✓ Embedding model: {self.embedder.model}")
         print(f"  ✓ Vector store: {self.store.persist_path}")
         return True
-    
+
     def index_session(self, session_path: Path, force: bool = False) -> int:
         """
         Index a single session with proper project classification.
@@ -195,7 +257,7 @@ class SessionIndexer:
                 return 0  # Don't mark as indexed
 
         return added
-    
+
     def index_all(
         self,
         reindex: bool = False,
@@ -217,18 +279,7 @@ class SessionIndexer:
         """
         start_time = datetime.now()
 
-        if not self.check_dependencies():
-            return {"error": "Dependency check failed"}
-
-        # Warn about duplicate sessions
-        warn_duplicate_sessions()
-
-        # Refresh active session list
-        self.active_sessions = get_active_session_ids()
-        if self.active_sessions and skip_active:
-            print(f"\n⏭ Will skip {len(self.active_sessions)} active session(s)")
-
-        # Find all sessions
+        # Find all sessions first to check if there's work to do
         all_sessions = find_all_sessions(self.claude_dir)
 
         # Single-session mode: filter to matching session and force re-index
@@ -246,8 +297,6 @@ class SessionIndexer:
         if limit:
             all_sessions = all_sessions[:limit]
 
-        print(f"\nFound {len(all_sessions)} session files")
-
         # Get already indexed
         if reindex:
             indexed = set()
@@ -264,21 +313,34 @@ class SessionIndexer:
                     indexed.discard(s.stem)
         else:
             indexed = self.get_indexed_sessions()
-            print(f"Already indexed: {len(indexed)} sessions")
 
         # Filter to new sessions
         new_sessions = [s for s in all_sessions if s.stem not in indexed]
-        print(f"New sessions to index: {len(new_sessions)}")
-        
+
+        # Early exit if nothing to do (skip dependency checks entirely)
         if not new_sessions:
-            print("\nNo new sessions to index.")
+            print(f"✅ All {len(all_sessions)} sessions indexed. Nothing to do.")
             return {
                 "sessions_found": len(all_sessions),
                 "sessions_indexed": 0,
                 "chunks_added": 0,
                 "duration_seconds": 0
             }
-        
+
+        # Only check dependencies when there's actual work to do
+        print(f"\nFound {len(new_sessions)} new session(s) to index")
+
+        if not self.check_dependencies():
+            return {"error": "Dependency check failed"}
+
+        # Warn about duplicate sessions
+        warn_duplicate_sessions()
+
+        # Refresh active session list
+        self.active_sessions = get_active_session_ids()
+        if self.active_sessions and skip_active:
+            print(f"⏭ Will skip {len(self.active_sessions)} active session(s)")
+
         # Index each session
         print("\n" + "=" * 60)
         print("Indexing Sessions")
@@ -309,34 +371,26 @@ class SessionIndexer:
                     successful += 1
                     print(f"    ✓ Indexed {chunks_added} chunks")
                 else:
+                    # Mark empty sessions as indexed so they aren't
+                    # re-scanned on every run (snapshot-only, empty, etc.)
+                    indexed.add(session_id)
                     print(f"    - No content to index")
 
             except Exception as e:
                 failed += 1
                 print(f"    ✗ Error: {e}")
-        
+
         # Save progress
         self.save_indexed_sessions(indexed)
-        
+
         duration = (datetime.now() - start_time).total_seconds()
-        
+
         # Print summary
         print("\n" + "=" * 60)
         print("Indexing Complete")
         print("=" * 60)
 
         stats = self.store.get_stats()
-
-        summary = {
-            "sessions_found": len(all_sessions),
-            "sessions_indexed": successful,
-            "sessions_skipped": skipped,
-            "sessions_failed": failed,
-            "chunks_added": total_chunks,
-            "total_chunks_in_db": stats.get("total_chunks", 0),
-            "total_sessions_in_db": stats.get("unique_sessions", 0),
-            "duration_seconds": round(duration, 1)
-        }
 
         print(f"\nSessions indexed: {successful}")
         if skipped > 0:
@@ -346,6 +400,21 @@ class SessionIndexer:
         print(f"Total in database: {stats.get('total_chunks', 0)} chunks")
         print(f"Time elapsed: {duration:.1f} seconds")
 
+        # Verify ChromaDB/JSON cache are in sync
+        integrity = self.verify_cache_integrity(verbose=True)
+
+        summary = {
+            "sessions_found": len(all_sessions),
+            "sessions_indexed": successful,
+            "sessions_skipped": skipped,
+            "sessions_failed": failed,
+            "chunks_added": total_chunks,
+            "total_chunks_in_db": stats.get("total_chunks", 0),
+            "total_sessions_in_db": stats.get("unique_sessions", 0),
+            "duration_seconds": round(duration, 1),
+            "cache_healed": integrity.get("healed", False),
+        }
+
         return summary
 
 
@@ -354,7 +423,7 @@ def main():
         description="Index Claude Code sessions for semantic search"
     )
     parser.add_argument(
-        "--reindex", 
+        "--reindex",
         action="store_true",
         help="Reindex all sessions from scratch"
     )
@@ -368,28 +437,41 @@ def main():
         action="store_true",
         help="Just show current stats, don't index"
     )
-    
+
     args = parser.parse_args()
-    
-    indexer = SessionIndexer()
-    
+
+    try:
+        indexer = SessionIndexer()
+    except Exception as e:
+        err_str = str(e).lower()
+        if "connection refused" in err_str or "connect call failed" in err_str:
+            print(f"\n⚠ Cannot connect to Ollama")
+            print(f"  Start it with: ollama serve")
+            exit(1)
+        raise
+
     if args.stats:
         stats = indexer.store.get_stats()
         print("\nCurrent Index Stats:")
         print("=" * 40)
         for key, value in stats.items():
             print(f"  {key}: {value}")
-        
+
         indexed = indexer.get_indexed_sessions()
         print(f"  indexed_sessions: {len(indexed)}")
+
+        # Run integrity check
+        integrity = indexer.verify_cache_integrity(verbose=True)
+        if not integrity.get("only_in_chromadb") and not integrity.get("only_in_cache"):
+            print(f"\n  ✓ Cache integrity: OK")
         return
-    
+
     result = indexer.index_all(reindex=args.reindex, limit=args.limit)
-    
+
     if "error" in result:
         print(f"\n❌ {result['error']}")
         exit(1)
-    
+
     print("\n✅ Indexing complete!")
 
 

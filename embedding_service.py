@@ -33,7 +33,11 @@ class EmbeddingService:
         """Check if the embedding model is available."""
         try:
             models = self.client.list()
-            model_names = [m.get("name", "").split(":")[0] for m in models.get("models", [])]
+            # Ollama API uses "model" key (not "name"), with ":latest" suffix
+            model_names = []
+            for m in models.get("models", []):
+                raw = m.get("model", "") or m.get("name", "")
+                model_names.append(raw.split(":")[0])
             return self.model in model_names
         except Exception as e:
             print(f"Error checking models: {e}")
