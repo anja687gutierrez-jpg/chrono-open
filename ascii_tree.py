@@ -8,7 +8,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
 from chrono_utils import (
-    classify_era, format_timestamp_relative, separator,
+    classify_era, format_timestamp_relative, separator, truncate, box_header,
     RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY
 )
 
@@ -50,7 +50,7 @@ def build_session_tree(
 
     root = TreeNode(
         id=root_session.get("session_id", "unknown")[:8],
-        label=root_session.get("summary", root_session.get("project", "Session"))[:40],
+        label=truncate(root_session.get("summary", root_session.get("project", "Session")), max_len=40),
         era_emoji=era.emoji,
         time_str=time_str
     )
@@ -231,11 +231,7 @@ def format_tree_header(use_color: bool = True) -> str:
     _bold = BOLD if use_color else ""
     _reset = RESET if use_color else ""
 
-    return f"""
-{_bold}{_cyan}╔══════════════════════════════════════════════════════════════════╗{_reset}
-{_bold}{_cyan}║  🌳 SESSION TREE - Visual Relationship Map                       {_reset}
-{_bold}{_cyan}╚══════════════════════════════════════════════════════════════════╝{_reset}
-"""
+    return "\n" + box_header("🌳 SESSION TREE - Visual Relationship Map", color=_cyan, use_color=use_color) + "\n"
 
 
 def create_session_tree_view(

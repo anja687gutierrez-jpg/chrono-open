@@ -180,10 +180,14 @@ def cmd_list() -> None:
     print(separator("═", 2) + "\n")
 
     if not gates:
-        print(f"  {DIM}No Time Gates saved yet.{RESET}")
-        print(f"\n  {DIM}Create your first gate:{RESET}")
-        print(f"  gate save my-project-name")
-        print(f"  gate save auth-work abc12345  {DIM}(with specific session){RESET}\n")
+        print(f"  {BOLD}⏳ No Time Gates saved yet{RESET}\n")
+        print(f"  {DIM}Gates are bookmarks to important sessions.{RESET}")
+        print(f"  {DIM}Save one and jump back anytime.{RESET}\n")
+        print(f"  {BOLD}Quick start:{RESET}")
+        print(f"    gate save my-project            {DIM}← Bookmark latest session{RESET}")
+        print(f"    gate save auth-work abc12345     {DIM}← Bookmark specific session{RESET}")
+        print(f"    gate save feature --notes \"WIP\"  {DIM}← Add notes{RESET}")
+        print()
         return
 
     # Sort by creation date (newest first)

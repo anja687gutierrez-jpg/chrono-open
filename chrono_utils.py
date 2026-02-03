@@ -169,6 +169,110 @@ def separator(char: str = "─", indent: int = 2, color: str = "") -> str:
     return line
 
 
+def truncate(text: str, max_len: int = 0, suffix: str = "...") -> str:
+    """Truncate text to fit a max length, appending suffix if cut.
+
+    Args:
+        text: The string to truncate
+        max_len: Maximum length. If 0, derives from term_width() - 12.
+        suffix: Appended when text is cut (default "...")
+    """
+    if max_len <= 0:
+        max_len = term_width() - 12
+    if len(text) <= max_len:
+        return text
+    return text[:max_len - len(suffix)] + suffix
+
+
+def box_header(title: str, subtitle: str = "", indent: int = 0,
+               color: str = "", use_color: bool = True) -> str:
+    """Build a dynamic-width box header (╔═══╗ style).
+
+    Args:
+        title: Main title line (e.g. "🌳 SESSION TREE - Visual Map")
+        subtitle: Optional second line inside the box
+        color: ANSI color for the box chrome
+        indent: Leading spaces
+        use_color: If False, strip all color codes
+    """
+    if not use_color:
+        color = ""
+    _bold = BOLD if use_color else ""
+    _reset = RESET if use_color else ""
+
+    w = term_width() - indent
+    pad = " " * indent
+
+    lines = []
+    lines.append(f"{_bold}{color}{pad}╔{'═' * (w - 2)}╗{_reset}")
+    lines.append(f"{_bold}{color}{pad}║  {title:<{w - 5}}║{_reset}")
+    if subtitle:
+        lines.append(f"{_bold}{color}{pad}║  {subtitle:<{w - 5}}║{_reset}")
+    lines.append(f"{_bold}{color}{pad}╚{'═' * (w - 2)}╝{_reset}")
+    return "\n".join(lines)
+
+
+def box_lines(indent: int = 2, color: str = "",
+              use_color: bool = True) -> tuple:
+    """Build dynamic-width box lines (┌───┐ / └───┘ style).
+
+    Returns (top_line, bottom_line) strings.
+    """
+    if not use_color:
+        color = ""
+    _bold = BOLD if use_color else ""
+    _reset = RESET if use_color else ""
+    w = term_width() - indent
+    pad = " " * indent
+    top = f"{_bold}{color}{pad}┌{'─' * (w - 2)}┐{_reset}"
+    bottom = f"{_bold}{color}{pad}└{'─' * (w - 2)}┘{_reset}"
+    return top, bottom
+
+
+class status_line:
+    """Context manager that prints a status message with spinner, clearing on exit.
+
+    Usage:
+        with status_line("Searching the timestream"):
+            do_slow_work()
+        # Line is cleared, result prints cleanly below
+    """
+
+    FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    def __init__(self, message: str):
+        self.message = message
+        self._thread = None
+        self._stop = False
+
+    def __enter__(self):
+        import threading, sys
+        self._stop = False
+
+        def _spin():
+            i = 0
+            while not self._stop:
+                frame = self.FRAMES[i % len(self.FRAMES)]
+                sys.stderr.write(f"\r  {DIM}{frame} {self.message}...{RESET}  ")
+                sys.stderr.flush()
+                i += 1
+                import time
+                time.sleep(0.1)
+
+        self._thread = threading.Thread(target=_spin, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *args):
+        import sys
+        self._stop = True
+        if self._thread:
+            self._thread.join(timeout=0.5)
+        # Clear the spinner line
+        sys.stderr.write("\r" + " " * (len(self.message) + 20) + "\r")
+        sys.stderr.flush()
+
+
 def get_era_by_code(code: str) -> Optional[Era]:
     """Get an era by its code name."""
     code_lower = code.lower().replace("-", "_").replace(" ", "_")

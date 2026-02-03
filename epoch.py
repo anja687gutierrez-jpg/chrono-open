@@ -33,7 +33,7 @@ from pathlib import Path
 from chrono_utils import (
     ERAS, RESET, BOLD, DIM,
     classify_era, format_timestamp_relative,
-    parse_flexible_date, separator
+    parse_flexible_date, separator, truncate
 )
 
 
@@ -144,7 +144,7 @@ def cmd_status() -> None:
     print(f"  {BOLD}Repository:{RESET}  {repo_name}")
     print(f"  {BOLD}Branch:{RESET}      {branch}{ahead_behind}")
     print(f"  {BOLD}Commit:{RESET}      {commit_hash if success else 'unknown'}")
-    print(f"  {BOLD}Message:{RESET}     {commit_msg[:50] if success2 else 'unknown'}{'...' if success2 and len(commit_msg) > 50 else ''}")
+    print(f"  {BOLD}Message:{RESET}     {truncate(commit_msg, 50) if success2 else 'unknown'}")
     print(f"  {BOLD}Author:{RESET}      {author if success4 else 'unknown'}")
     print(f"  {BOLD}Era:{RESET}         {era.emoji} {era.time_period} ({rel_time})")
     if changes:
@@ -211,7 +211,7 @@ def cmd_log(count: int = 10, all_branches: bool = False, oneline: bool = False) 
 
         # Format commit
         marker = "●" if i == 0 else "○"
-        print(f"\n  {era.color}{marker}{RESET} {BOLD}{short_hash}{RESET} {message[:45]}{'...' if len(message) > 45 else ''}")
+        print(f"\n  {era.color}{marker}{RESET} {BOLD}{short_hash}{RESET} {truncate(message, 45)}")
         print(f"    {DIM}{author} • {rel_time}{RESET}")
 
     print("\n" + separator("─", 2))
@@ -264,7 +264,7 @@ def cmd_jump(target: str, create_branch: Optional[str] = None) -> None:
         print(f"\n  {BOLD}🚀 EPOCH JUMP{RESET}")
         print(separator("─", 2))
         print(f"  {BOLD}{action}:{RESET}")
-        print(f"  {era.emoji} {target[:12]} - {target_msg[:40]}{'...' if len(target_msg) > 40 else ''}")
+        print(f"  {era.emoji} {target[:12]} - {truncate(target_msg, 40)}")
         print(f"  {DIM}Era: {era.time_period} ({rel_time}){RESET}")
         print(separator("─", 2))
         print()
@@ -380,7 +380,7 @@ def cmd_branches() -> None:
         current_marker = f" {BOLD}(current){RESET}" if branch_name == current else ""
 
         print(f"  {marker} {BOLD}{branch_name}{RESET}{current_marker}")
-        print(f"    {DIM}{message[:40]}{'...' if len(message) > 40 else ''} • {rel_time}{RESET}")
+        print(f"    {DIM}{truncate(message, 40)} • {rel_time}{RESET}")
 
     print("\n" + separator("─", 2))
     print(f"  {BOLD}Total: {len(branches)} branches{RESET}")

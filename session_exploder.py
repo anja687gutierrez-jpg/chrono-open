@@ -19,7 +19,7 @@ from typing import List, Optional, Dict, Set
 from datetime import datetime
 
 from chrono_utils import (
-    parse_timestamp, format_timestamp_relative, separator,
+    parse_timestamp, format_timestamp_relative, separator, truncate, box_header,
     RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY
 )
 from summary_store import SummaryStore
@@ -338,10 +338,11 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
 
     # Header
     short_id = exploded.session_id[:8]
-    lines.append(f"{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}")
-    lines.append(f"{BOLD}{CYAN}║  🔬 EXPLODED VIEW: #{short_id}  {RESET}")
-    lines.append(f"{BOLD}{CYAN}║  📁 Project: {exploded.project[:45]:<45}{RESET}")
-    lines.append(f"{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}")
+    lines.append(box_header(
+        f"🔬 EXPLODED VIEW: #{short_id}",
+        subtitle=f"📁 Project: {truncate(exploded.project, 45)}",
+        color=CYAN, use_color=use_color
+    ))
 
     # Duration & Stats
     if exploded.duration_minutes is not None:

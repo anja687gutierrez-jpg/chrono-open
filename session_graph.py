@@ -19,7 +19,8 @@ from collections import defaultdict
 
 from chrono_utils import (
     ERAS, RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY,
-    classify_era, parse_timestamp, format_timestamp_relative, separator
+    classify_era, parse_timestamp, format_timestamp_relative,
+    separator, truncate, box_header, box_lines
 )
 from summary_store import SummaryStore
 from session_exploder import parse_raw_session, extract_files_and_tools, shorten_path
@@ -197,23 +198,21 @@ def format_session_graph(
     short_id = target.session_id[:8]
     era = classify_era(target.timestamp)
 
-    lines.append(f"{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}")
-    lines.append(f"{BOLD}{CYAN}║  🌳 SESSION GRAPH: #{short_id}  {RESET}")
-    lines.append(f"{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}")
+    lines.append(box_header(f"🌳 SESSION GRAPH: #{short_id}", color=CYAN))
     lines.append("")
 
     # Target session (center of graph)
-    lines.append(f"  {BOLD}{GREEN}┌─────────────────────────────────────────────────────────┐{RESET}")
+    top_box, bottom_box = box_lines(color=GREEN)
+    lines.append(top_box)
     lines.append(f"  {BOLD}{GREEN}│  🎯 TARGET: #{short_id}{RESET}")
     lines.append(f"  {GREEN}│  {DIM}📁 {target.project}{RESET}")
 
     if target.summary:
-        summary_display = target.summary[:50] + "..." if len(target.summary) > 50 else target.summary
-        lines.append(f"  {GREEN}│  {DIM}📝 {summary_display}{RESET}")
+        lines.append(f"  {GREEN}│  {DIM}📝 {truncate(target.summary)}{RESET}")
 
     time_str = format_timestamp_relative(target.timestamp)
     lines.append(f"  {GREEN}│  {DIM}{era.emoji} {time_str}{RESET}")
-    lines.append(f"  {BOLD}{GREEN}└─────────────────────────────────────────────────────────┘{RESET}")
+    lines.append(bottom_box)
     lines.append("")
 
     if not related:
@@ -239,7 +238,7 @@ def format_session_graph(
             node_time = format_timestamp_relative(node.timestamp)
             strength_bar = "█" * int(strength * 10) + "░" * (10 - int(strength * 10))
 
-            summary = node.summary[:40] + "..." if node.summary and len(node.summary) > 40 else (node.summary or "")
+            summary = truncate(node.summary or "", max_len=40)
 
             lines.append(f"     ├── #{node.session_id[:8]} {strength_bar}")
             lines.append(f"     │   {DIM}{summary}{RESET}")
@@ -352,9 +351,7 @@ def graph_project_command(project_name: str, limit: int = 15) -> bool:
     project_sessions = project_sessions[:limit]
 
     lines = []
-    lines.append(f"\n{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}")
-    lines.append(f"{BOLD}{CYAN}║  🌳 PROJECT GRAPH: {project_name[:40]:<40}  {RESET}")
-    lines.append(f"{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}")
+    lines.append("\n" + box_header(f"🌳 PROJECT GRAPH: {truncate(project_name, 40)}", color=CYAN))
     lines.append("")
     lines.append(f"  {BOLD}{len(project_sessions)} sessions found{RESET}")
     lines.append(separator("─", 2))
@@ -377,7 +374,7 @@ def graph_project_command(project_name: str, limit: int = 15) -> bool:
 
         for node in sessions:
             time_str = format_timestamp_relative(node.timestamp)
-            summary = node.summary[:45] + "..." if node.summary and len(node.summary) > 45 else (node.summary or "No summary")
+            summary = truncate(node.summary or "No summary", max_len=45)
 
             lines.append(f"     │ #{node.session_id[:8]} │ {time_str:10} │ {summary}")
 

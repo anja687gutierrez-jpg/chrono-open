@@ -12,7 +12,7 @@ from embedding_service import EmbeddingService
 from vector_store import SessionVectorStore
 from summary_store import SummaryStore
 from chrono_utils import (
-    classify_era, format_timestamp_relative,
+    classify_era, format_timestamp_relative, truncate,
     RESET, BOLD, DIM, CYAN, GREEN, BLUE
 )
 
@@ -151,7 +151,7 @@ def format_similar_sessions(
         bar_filled = int(score / 10)
         bar = "█" * bar_filled + "░" * (10 - bar_filled)
 
-        summary_display = summary[:45] + "..." if summary and len(summary) > 45 else (summary or "No summary")
+        summary_display = truncate(summary or "No summary", max_len=45)
 
         lines.append(f"  {BOLD}{i}. #{session['session_id'][:8]}{RESET} {bar} {score}%")
         lines.append(f"     {DIM}📝 {summary_display}{RESET}")

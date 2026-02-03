@@ -14,7 +14,8 @@ from typing import List, Dict, Optional, Tuple
 
 from chrono_utils import (
     ERAS, RESET, BOLD, DIM, CYAN,
-    classify_era, format_timestamp_relative, parse_timestamp
+    classify_era, format_timestamp_relative, parse_timestamp,
+    separator, truncate, box_header
 )
 from summary_store import SummaryStore
 from vector_store import SessionVectorStore
@@ -106,7 +107,7 @@ def generate_predictions(recent_sessions: List[Dict]) -> List[Dict]:
     # 1. Continue most recent session
     most_recent = recent_sessions[0]
     era = most_recent.get("era", ERAS[0])
-    summary = most_recent.get("summary", "")[:50]
+    summary = truncate(most_recent.get("summary", ""), max_len=50)
 
     predictions.append({
         "type": "continue",
@@ -121,7 +122,7 @@ def generate_predictions(recent_sessions: List[Dict]) -> List[Dict]:
         second = recent_sessions[1]
         if second.get("project") != most_recent.get("project"):
             s_era = second.get("era", ERAS[0])
-            s_summary = second.get("summary", "")[:45]
+            s_summary = truncate(second.get("summary", ""), max_len=45)
             predictions.append({
                 "type": "continue",
                 "label": f"Switch to: {s_summary}..." if s_summary else f"Switch to {second.get('project')}",
@@ -169,15 +170,12 @@ def generate_predictions(recent_sessions: List[Dict]) -> List[Dict]:
 # Interactive Menu
 # ============================================================
 
-WELCOME_BANNER = f"""
-{BOLD}{CYAN}
-   ╔═══════════════════════════════════════════════════════════════╗
-   ║                                                               ║
-   ║   ⏰ CHRONO - Project Epoch                                   ║
-   ║   Time-Travel Through Your Code History                       ║
-   ║                                                               ║
-   ╚═══════════════════════════════════════════════════════════════╝
-{RESET}"""
+def _welcome_banner() -> str:
+    return "\n" + box_header(
+        "⏰ CHRONO - Project Epoch",
+        subtitle="Time-Travel Through Your Code History",
+        indent=3, color=CYAN
+    ) + "\n"
 
 
 def show_welcome_menu() -> Optional[str]:
@@ -187,7 +185,7 @@ def show_welcome_menu() -> Optional[str]:
     Returns:
         Command to execute, or None if cancelled
     """
-    print(WELCOME_BANNER)
+    print(_welcome_banner())
 
     # Get greeting
     greeting = get_time_greeting()
@@ -197,7 +195,7 @@ def show_welcome_menu() -> Optional[str]:
     # SMART PROJECT DETECTION - Show your active projects
     # ============================================================
     print(f"  {BOLD}📁 YOUR PROJECTS{RESET}")
-    print(f"  {'─' * 55}\n")
+    print(separator("─", 2) + "\n")
 
     top_projects = get_top_projects(4)
     project_commands = []
@@ -222,7 +220,7 @@ def show_welcome_menu() -> Optional[str]:
         print(f"     {proj.session_count} sessions │ last: {time_str}")
 
         if proj.last_session_summary:
-            preview = proj.last_session_summary[:45] + "..."
+            preview = truncate(proj.last_session_summary, max_len=45)
             print(f"     {DIM}\"{preview}\"{RESET}")
 
         print()
@@ -238,12 +236,12 @@ def show_welcome_menu() -> Optional[str]:
 
     # Quick actions section
     print(f"  {BOLD}⚡ QUICK ACTIONS{RESET}")
-    print(f"  {'─' * 55}")
+    print(separator("─", 2))
     print(f"  {DIM}s{RESET} │ Search       │ Find sessions by keyword")
     print(f"  {DIM}e{RESET} │ Eras         │ Browse by time period")
     print()
     print(f"  {BOLD}🔬 CADDY-STYLE{RESET}")
-    print(f"  {'─' * 55}")
+    print(separator("─", 2))
     print(f"  {DIM}x{RESET} │ Explode      │ Break apart a session")
     print(f"  {DIM}t{RESET} │ Tree         │ Visual relationship tree")
     print(f"  {DIM}m{RESET} │ Similar      │ Find semantically related sessions")
@@ -251,7 +249,7 @@ def show_welcome_menu() -> Optional[str]:
     print(f"  {DIM}h{RESET} │ HTML         │ Open project dashboard")
     print()
     print(f"  {BOLD}🛠️ TOOLS{RESET}")
-    print(f"  {'─' * 55}")
+    print(separator("─", 2))
     print(f"  {DIM}l{RESET} │ Lavos        │ Project health scan 🔥")
     print(f"  {DIM}k{RESET} │ Tech         │ Run workflow automation")
     print(f"  {DIM}w{RESET} │ Gate         │ Time gate bookmarks")
@@ -259,7 +257,7 @@ def show_welcome_menu() -> Optional[str]:
     print(f"  {DIM}r{RESET} │ Reindex      │ Force re-index all sessions 🔄")
     print()
     print(f"  {BOLD}📍 OTHER{RESET}")
-    print(f"  {'─' * 55}")
+    print(separator("─", 2))
     print(f"  {DIM}n{RESET} │ New          │ Start fresh session")
     print(f"  {DIM}p{RESET} │ Pin          │ Pin/unpin a project")
     print(f"  {DIM}q{RESET} │ Quit         │ Exit chrono")

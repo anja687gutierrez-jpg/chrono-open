@@ -18,7 +18,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-from chrono_utils import parse_timestamp, format_timestamp_relative, DIM, RESET
+from chrono_utils import parse_timestamp, format_timestamp_relative, truncate, DIM, RESET
 from summary_store import SummaryStore
 
 
@@ -428,7 +428,7 @@ def format_project_summary() -> str:
         # Summary preview
         summary_preview = ""
         if proj.last_session_summary:
-            summary_preview = proj.last_session_summary[:40] + "..."
+            summary_preview = truncate(proj.last_session_summary, max_len=40)
 
         lines.append(f"  {i}. {proj.emoji} {proj.name}{indicator_str}")
         lines.append(f"     {proj.session_count} sessions │ last: {time_str}")

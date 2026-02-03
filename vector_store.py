@@ -453,7 +453,7 @@ class SessionVectorStore:
             project_filter: Optional project name to filter by
 
         Returns:
-            List of SearchResult objects with a fixed high score (85)
+            List of SearchResult objects with scores based on match quality (80-98)
         """
         if not query_text:
             return []
@@ -482,14 +482,27 @@ class SessionVectorStore:
             return []
 
         search_results = []
+        query_lower = query_text.lower()
+        query_len = len(query_text)
+
         for i in range(len(results["ids"])):
             metadata = results["metadatas"][i] if results.get("metadatas") else {}
             document = results["documents"][i] if results.get("documents") else ""
 
+            # Score based on match quality instead of fixed 85:
+            #  - Base score 80 for any substring match
+            #  - Bonus for query length (longer = more specific = better match)
+            #  - Bonus for match density (multiple occurrences)
+            doc_lower = document.lower() if document else ""
+            occurrences = doc_lower.count(query_lower) if query_lower else 0
+            length_bonus = min(10, query_len // 5)  # +1 per 5 chars, max +10
+            density_bonus = min(5, occurrences - 1) if occurrences > 1 else 0  # +1 per extra occurrence, max +5
+            score = min(98, 80 + length_bonus + density_bonus)
+
             search_results.append(SearchResult(
                 session_id=metadata.get("session_id", ""),
                 project=metadata.get("project", ""),
-                score=85,  # Fixed high score for exact text matches
+                score=score,
                 preview=metadata.get("preview", "")[:200],
                 chunk_index=metadata.get("chunk_index", 0),
                 timestamp=metadata.get("timestamp"),

@@ -34,7 +34,7 @@ from chrono_utils import (
     parse_flexible_date, is_within_date_range, is_within_era,
     format_era_header, format_era_badge, format_era_compact,
     format_timestamp_relative, get_era_summary,
-    term_width, separator
+    term_width, separator, truncate, status_line, box_header
 )
 from session_exploder import explode_session, format_exploded_view
 from session_graph import graph_command, graph_project_command, find_related_sessions
@@ -103,8 +103,13 @@ def find_sessions_chrono(
     # Check if we have any indexed sessions
     stats = store.get_stats()
     if stats.get("total_chunks", 0) == 0:
-        print(f"\n{BOLD}⚠ No sessions indexed yet!{RESET}")
-        print("Run 'chrono index' first to build your search index.")
+        print(f"\n  {BOLD}⚠ No sessions indexed yet!{RESET}")
+        print(f"  {DIM}Your search index is empty. Let's fix that:{RESET}\n")
+        print(f"  {BOLD}1.{RESET} chrono index          {DIM}← Index all Claude sessions{RESET}")
+        print(f"  {BOLD}2.{RESET} chrono index --stats   {DIM}← Check index health{RESET}")
+        print(f"\n  {DIM}Chrono needs Ollama running for embeddings:{RESET}")
+        print(f"     ollama serve")
+        print()
         return []
 
     # Get active sessions to exclude
@@ -114,14 +119,16 @@ def find_sessions_chrono(
     # ~2000 chars is a safe limit to avoid degraded embeddings)
     embed_query = query[:2000] if len(query) > 2000 else query
 
-    # Embed the query
-    query_embedding = embedder.embed(embed_query)
+    # Search with progress indicator
+    with status_line("Searching the timestream"):
+        # Embed the query
+        query_embedding = embedder.embed(embed_query)
 
-    # 1. Vector (semantic) search
-    sessions = store.search_sessions(query_embedding, n_sessions=top_k * 5)
+        # 1. Vector (semantic) search
+        sessions = store.search_sessions(query_embedding, n_sessions=top_k * 5)
 
-    # 2. Full-text search fallback (finds exact string matches)
-    text_results = store.search_text(query, n_results=top_k * 5, project_filter=project_filter)
+        # 2. Full-text search fallback (finds exact string matches)
+        text_results = store.search_text(query, n_results=top_k * 5, project_filter=project_filter)
 
     # Aggregate text results by session (same as search_sessions logic)
     text_session_map = {}
@@ -271,12 +278,31 @@ def extract_summary(preview: str, max_len: int = 60) -> str:
         if sentences and len(sentences[0]) > 10:
             text = sentences[0]
         else:
-            # Fall back to removing the thinking prefix
             text = re.sub(r'\[Thinking:\s*', '', text)
+
+    # Filter out low-value generic responses
+    noise_patterns = [
+        r"^The assistant responded with a generic message",
+        r"^I'll help you",
+        r"^Sure,? I",
+        r"^Let me ",
+        r"^I can help",
+        r"^Here's ",
+    ]
+    for pattern in noise_patterns:
+        if re.match(pattern, text, re.IGNORECASE):
+            # Try to find a more useful part after the noise
+            rest = re.sub(pattern, '', text, flags=re.IGNORECASE).strip()
+            if rest and len(rest) > 15:
+                text = rest
+            break
 
     # Remove markdown artifacts
     text = text.replace("**", "").replace("##", "").replace("```", "")
     text = text.replace("#", "").replace("`", "")
+
+    # Remove file path noise at the start (common in tool output previews)
+    text = re.sub(r'^/[^\s]+\s*', '', text)
 
     # Remove newlines and extra whitespace
     text = " ".join(text.split())
@@ -407,14 +433,15 @@ def explode_command(session_arg: str) -> bool:
         print(f"  {DIM}Example: chrono explode bf695425{RESET}\n")
         return False
 
-    print(f"\n  {DIM}Exploding session: {session_path.stem[:20]}...{RESET}\n")
-
-    exploded = explode_session(session_path)
+    with status_line(f"Exploding session #{session_path.stem[:12]}"):
+        exploded = explode_session(session_path)
     if exploded:
         print(format_exploded_view(exploded))
         return True
     else:
         print(f"  {BOLD}⚠ Could not explode session{RESET}")
+        print(f"  {DIM}The session file may be empty or corrupted.{RESET}")
+        print(f"  {DIM}Try: chrono explode <different-session-id>{RESET}\n")
         return False
 
 
@@ -428,9 +455,8 @@ def similar_command(session_arg: str) -> bool:
     Returns:
         True if session was found
     """
-    print(f"\n  {DIM}Finding sessions similar to: {session_arg}...{RESET}\n")
-
-    similar = find_similar_sessions(session_arg)
+    with status_line(f"Finding sessions similar to #{session_arg[:12]}"):
+        similar = find_similar_sessions(session_arg)
     print(format_similar_sessions(session_arg, similar))
 
     if similar:
@@ -453,10 +479,9 @@ def tree_command(session_arg: str) -> bool:
     Returns:
         True if session was found
     """
-    print(f"\n  {DIM}Building session tree for: {session_arg}...{RESET}\n")
-
-    # Get related sessions
-    target, related = find_related_sessions(session_arg)
+    with status_line(f"Building session tree for #{session_arg[:12]}"):
+        # Get related sessions
+        target, related = find_related_sessions(session_arg)
     if not target:
         print(f"\n  {BOLD}⚠ Session not found:{RESET} {session_arg}")
         return False
@@ -598,6 +623,34 @@ def main():
         print(f"\n{BOLD}⚠ Error:{RESET} {e}")
         print(f"  {DIM}Run 'chrono --help' for usage info{RESET}\n")
         sys.exit(1)
+
+
+def _check_first_run() -> bool:
+    """Check if Chrono has been set up. Returns True if ready, False if first run."""
+    from chrono_config import get_data_dir
+    data_dir = get_data_dir()
+    chroma_dir = data_dir / "chroma"
+
+    if not data_dir.exists() or not chroma_dir.exists():
+        print(box_header(
+            "⏰ Welcome to CHRONO!",
+            subtitle="Time-Travel Through Your Code History",
+            color=CYAN
+        ))
+        print()
+        print(f"  {BOLD}First time here? Let's get you set up:{RESET}\n")
+        print(f"  {BOLD}1.{RESET} Make sure Ollama is running:")
+        print(f"     ollama serve\n")
+        print(f"  {BOLD}2.{RESET} Build your search index:")
+        print(f"     chrono index\n")
+        print(f"  {BOLD}3.{RESET} Then search your sessions:")
+        print(f"     chrono \"firebase auth\"")
+        print(f"     chrono eras")
+        print()
+        print(f"  {DIM}Data will be stored in: {data_dir}{RESET}")
+        print(f"  {DIM}Indexing scans: ~/.claude/projects/ for session files{RESET}\n")
+        return False
+    return True
 
 
 def _main_inner():
@@ -801,6 +854,14 @@ def _main_inner():
     # Handle 'index' subcommand - Run indexer
     if query_str.lower().startswith("index"):
         parts = query_str.split()
+        if "--help" in parts or "-h" in parts:
+            print(f"\n  {BOLD}⏰ chrono index{RESET} — Build and manage your session index\n")
+            print(f"  {BOLD}Usage:{RESET}")
+            print(f"    chrono index                  {DIM}Index new sessions only{RESET}")
+            print(f"    chrono index --reindex        {DIM}Rebuild entire index from scratch{RESET}")
+            print(f"    chrono index <session-id>     {DIM}Index/re-index a single session{RESET}")
+            print(f"\n  {DIM}Requires Ollama running (ollama serve){RESET}\n")
+            return
         reindex = "--reindex" in parts or "-r" in parts
         # Check for single session ID (e.g., "chrono index 4717c89a")
         single_session = None
@@ -815,8 +876,20 @@ def _main_inner():
 
     # Handle 'gate' subcommand - Time gates (forward to gates.py)
     if query_str.lower().startswith("gate"):
+        parts = query_str.split()
+        if "--help" in parts or "-h" in parts:
+            print(f"\n  {BOLD}⏰ chrono gate{RESET} — Bookmark sessions (End of Time)\n")
+            print(f"  {BOLD}Usage:{RESET}")
+            print(f"    chrono gate list                    {DIM}Show all bookmarks{RESET}")
+            print(f"    chrono gate save <name>             {DIM}Bookmark latest session{RESET}")
+            print(f"    chrono gate save <name> <id>        {DIM}Bookmark specific session{RESET}")
+            print(f"    chrono gate save <name> --notes \"x\" {DIM}Add notes{RESET}")
+            print(f"    chrono gate jump <name>             {DIM}Get continue command{RESET}")
+            print(f"    chrono gate info <name>             {DIM}Detailed info{RESET}")
+            print(f"    chrono gate delete <name>           {DIM}Remove bookmark{RESET}")
+            print()
+            return
         import gates
-        # Pass remaining args to gates module
         parts = query_str.split(None, 1)
         gate_args = parts[1] if len(parts) > 1 else ""
         sys.argv = ["gate"] + gate_args.split()
@@ -825,6 +898,20 @@ def _main_inner():
 
     # Handle 'tech' subcommand - Workflow automation (forward to techs.py)
     if query_str.lower().startswith("tech"):
+        parts = query_str.split()
+        if "--help" in parts or "-h" in parts:
+            print(f"\n  {BOLD}⏰ chrono tech{RESET} — Workflow automation (Techs)\n")
+            print(f"  {BOLD}Usage:{RESET}")
+            print(f"    chrono tech list                    {DIM}Show all available techs{RESET}")
+            print(f"    chrono tech fire                    {DIM}Build (Lucca's fire){RESET}")
+            print(f"    chrono tech ice                     {DIM}Run tests (Marle's ice){RESET}")
+            print(f"    chrono tech slash                   {DIM}Lint (Crono's slash){RESET}")
+            print(f"    chrono tech antipode                {DIM}Build + Test (Dual Tech){RESET}")
+            print(f"    chrono tech luminaire               {DIM}Build + Test + Deploy (Triple!){RESET}")
+            print(f"    chrono tech <name> --dry-run        {DIM}Preview without running{RESET}")
+            print(f"    chrono tech custom <name> \"<cmd>\"   {DIM}Create custom tech{RESET}")
+            print()
+            return
         import techs
         parts = query_str.split(None, 1)
         tech_args = parts[1] if len(parts) > 1 else ""
@@ -915,6 +1002,10 @@ def _main_inner():
                     )
             else:
                 print(f"\n  {BOLD}Run:{RESET} {command}\n")
+        sys.exit(0)
+
+    # First-run check (only for search — subcommands like 'index' are already handled above)
+    if not _check_first_run():
         sys.exit(0)
 
     # Parse era filter
