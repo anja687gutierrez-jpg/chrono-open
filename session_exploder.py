@@ -326,9 +326,10 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
     Like CADDY showing CAD components laid out.
     """
     # Colors (from chrono_utils; disabled when use_color=False)
+    # Both branches must assign ALL color locals — Python treats any
+    # assignment in either branch as declaring a local for the whole function.
     if use_color:
-        # Local aliases reference chrono_utils module-level constants
-        # RESET, BOLD, DIM, CYAN, GREEN, MAGENTA already imported
+        from chrono_utils import RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY
         YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
         WHITE = GRAY     # "White" is actually dark gray for light-bg visibility
     else:

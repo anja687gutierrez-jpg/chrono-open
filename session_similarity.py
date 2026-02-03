@@ -12,7 +12,7 @@ from embedding_service import EmbeddingService
 from vector_store import SessionVectorStore
 from summary_store import SummaryStore
 from chrono_utils import (
-    classify_era, format_timestamp_relative, truncate,
+    classify_era, format_timestamp_relative, truncate, separator,
     RESET, BOLD, DIM, CYAN, GREEN, BLUE
 )
 
@@ -125,15 +125,15 @@ def format_similar_sessions(
 ) -> str:
     """Format similar sessions for display."""
     if use_color:
-        # Local alias: "Yellow" is actually blue for light-bg visibility
-        YELLOW = BLUE
+        from chrono_utils import CYAN, GREEN, BLUE
+        YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
     else:
         CYAN = GREEN = YELLOW = ""
 
     lines = []
 
     lines.append(f"\n{BOLD}{CYAN}🧠 SEMANTICALLY SIMILAR SESSIONS{RESET}")
-    lines.append(f"{CYAN}{'─' * 55}{RESET}")
+    lines.append(separator("─", 0, CYAN))
     lines.append(f"{DIM}Sessions about similar topics to #{target_id[:8]}{RESET}\n")
 
     if not similar:

@@ -8,7 +8,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
 from chrono_utils import (
-    classify_era, format_timestamp_relative, separator, truncate, box_header,
+    classify_era, format_timestamp_relative, separator, truncate, box_header, term_width,
     RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY
 )
 
@@ -164,7 +164,7 @@ def render_tree(
         ASCII tree string
     """
     if use_color:
-        # Local aliases reference chrono_utils module-level constants
+        from chrono_utils import CYAN, GREEN, BLUE, MAGENTA, GRAY
         YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
         WHITE = GRAY     # "White" is actually dark gray for light-bg visibility
     else:
@@ -183,11 +183,12 @@ def render_tree(
     # Build the node line
     if is_root:
         # Root node - special formatting
-        lines.append(f"{BOLD}{GREEN}╭{'─' * 58}╮{RESET}")
+        bw = min(58, term_width() - 4)
+        lines.append(f"{BOLD}{GREEN}╭{'─' * bw}╮{RESET}")
         lines.append(f"{BOLD}{GREEN}│  🎯 #{node.id}  {RESET}")
         lines.append(f"{GREEN}│  {DIM}{node.label}{RESET}")
         lines.append(f"{GREEN}│  {node.era_emoji} {node.time_str}{RESET}")
-        lines.append(f"{BOLD}{GREEN}╰{'─' * 58}╯{RESET}")
+        lines.append(f"{BOLD}{GREEN}╰{'─' * bw}╯{RESET}")
         lines.append(f"{GREEN}          │{RESET}")
     elif node.id:
         # Regular session node

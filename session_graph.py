@@ -186,7 +186,7 @@ def format_session_graph(
     Shows the target session with its connections radiating out.
     """
     if use_color:
-        # Local aliases reference chrono_utils module-level constants
+        from chrono_utils import CYAN, GREEN, BLUE, MAGENTA, GRAY
         YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
         WHITE = GRAY     # "White" is actually dark gray for light-bg visibility
     else:
