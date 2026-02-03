@@ -334,6 +334,23 @@ class SessionVectorStore:
         except:
             return 0
 
+    def get_indexed_session_ids(self) -> set:
+        """
+        Get all session IDs that have chunks in ChromaDB.
+
+        This is the source of truth for what's actually indexed.
+        More reliable than the JSON cache file.
+        """
+        try:
+            results = self.collection.get(include=["metadatas"])
+            session_ids = set()
+            for meta in results.get("metadatas", []):
+                if meta and meta.get("session_id"):
+                    session_ids.add(meta["session_id"])
+            return session_ids
+        except:
+            return set()
+
     def search_with_exclusions(
         self,
         query_embedding: List[float],

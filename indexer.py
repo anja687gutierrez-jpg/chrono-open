@@ -63,15 +63,31 @@ class SessionIndexer:
         self.active_sessions = get_active_session_ids()
     
     def get_indexed_sessions(self) -> Set[str]:
-        """Load the set of already indexed session IDs."""
+        """
+        Get set of already indexed session IDs.
+
+        Uses ChromaDB as source of truth, with JSON file as cache.
+        If they disagree, ChromaDB wins and JSON is updated.
+        """
+        # Get from ChromaDB (source of truth)
+        chromadb_sessions = self.store.get_indexed_session_ids()
+
+        # Get from cache file
+        cache_sessions = set()
         if self.indexed_file.exists():
             try:
                 with open(self.indexed_file) as f:
                     data = json.load(f)
-                return set(data.get("sessions", []))
+                cache_sessions = set(data.get("sessions", []))
             except:
                 pass
-        return set()
+
+        # If mismatch, sync cache to ChromaDB
+        if cache_sessions != chromadb_sessions:
+            print(f"  ℹ Syncing index cache (cache: {len(cache_sessions)}, ChromaDB: {len(chromadb_sessions)})")
+            self.save_indexed_sessions(chromadb_sessions)
+
+        return chromadb_sessions
     
     def save_indexed_sessions(self, sessions: Set[str]):
         """Save the set of indexed session IDs."""
