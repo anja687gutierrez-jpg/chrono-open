@@ -8,6 +8,8 @@ Uses nomic-embed-text model (768 dimensions, 8192 token context).
 from typing import List, Optional
 import time
 
+from chrono_config import OllamaError
+
 
 class EmbeddingService:
     """Generate embeddings using Ollama's nomic-embed-text model."""
@@ -54,24 +56,62 @@ class EmbeddingService:
             print(f"Error pulling model: {e}")
             return False
     
-    def embed(self, text: str) -> List[float]:
+    def embed(self, text: str, timeout: int = 30) -> List[float]:
         """
-        Generate embedding for a single text.
-        
+        Generate embedding for a single text with timeout and retry.
+
         Args:
             text: The text to embed
-            
+            timeout: Max seconds to wait (default 30). Retries once on timeout.
+
         Returns:
             List of floats (768 dimensions for nomic-embed-text)
         """
         if not text or not text.strip():
             raise ValueError("Cannot embed empty text")
-        
-        try:
-            response = self.client.embed(model=self.model, input=text)
-            return response["embeddings"][0]
-        except Exception as e:
-            raise RuntimeError(f"Embedding failed: {e}")
+
+        import signal, sys
+
+        def _timeout_handler(signum, frame):
+            raise TimeoutError("Ollama embedding timed out")
+
+        for attempt in range(2):
+            # Set timeout (Unix only; harmless no-op on unsupported platforms)
+            old_handler = None
+            try:
+                if hasattr(signal, 'SIGALRM'):
+                    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+                    signal.alarm(timeout)
+            except (ValueError, OSError):
+                pass  # Can't set alarm (e.g. not main thread)
+
+            try:
+                response = self.client.embed(model=self.model, input=text)
+                return response["embeddings"][0]
+            except TimeoutError:
+                if attempt == 0:
+                    print("  ⏳ Ollama is loading the model, retrying...",
+                          file=sys.stderr, flush=True)
+                    continue  # Retry once with same timeout
+                raise OllamaError(
+                    f"Embedding timed out after {timeout}s × 2 attempts. "
+                    "Ollama may be cold-starting — try again in a moment."
+                )
+            except Exception as e:
+                # Wrap connection errors as OllamaError for clean handling upstream
+                err_str = str(e).lower()
+                if "refused" in err_str or "connect" in err_str or "unavailable" in err_str:
+                    raise OllamaError(f"Cannot connect to Ollama: {e}")
+                raise OllamaError(f"Embedding failed: {e}")
+            finally:
+                # Restore alarm
+                try:
+                    if hasattr(signal, 'SIGALRM'):
+                        signal.alarm(0)
+                        if old_handler is not None:
+                            signal.signal(signal.SIGALRM, old_handler)
+                except (ValueError, OSError):
+                    pass
     
     def embed_batch(
         self, 

@@ -11,6 +11,8 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dataclasses import dataclass
 
+from chrono_config import DatabaseError
+
 
 @dataclass
 class SearchResult:
@@ -25,18 +27,9 @@ class SearchResult:
 
 
 def get_chrono_data_dir() -> Path:
-    """Get the Chrono data directory, supporting migration from old path."""
-    new_path = Path.home() / ".chrono"
-    old_path = Path.home() / ".smart-forking"
-
-    # Prefer new path if it exists
-    if new_path.exists():
-        return new_path
-    # Fall back to old path if it exists
-    if old_path.exists():
-        return old_path
-    # Default to new path for fresh installs
-    return new_path
+    """Get the Chrono data directory (delegates to chrono_config)."""
+    from chrono_config import get_data_dir
+    return get_data_dir()
 
 
 def _is_chromadb_corruption(exc: Exception) -> bool:
@@ -80,11 +73,13 @@ class SessionVectorStore:
         self._collection = None
 
     def _handle_corruption(self, exc: Exception, context: str = "") -> None:
-        """Print a helpful message when ChromaDB is corrupted and re-raise."""
+        """Raise DatabaseError when ChromaDB is corrupted."""
         where = f" during {context}" if context else ""
-        print(f"\n  ⚠ ChromaDB error{where}: {exc}")
-        print(f"  The search index may be corrupted.")
-        print(f"  Rebuild it with: chrono index --reindex\n")
+        raise DatabaseError(
+            f"ChromaDB error{where}: {exc}\n"
+            f"  The search index may be corrupted.\n"
+            f"  Rebuild it with: chrono index --reindex"
+        ) from exc
 
     @property
     def client(self):

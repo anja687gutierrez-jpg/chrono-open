@@ -284,6 +284,35 @@ class IndexLock:
 
 
 # ============================================================
+# Custom Error Types
+# ============================================================
+
+class ChronoError(Exception):
+    """Base exception for all Chrono errors."""
+    pass
+
+
+class OllamaError(ChronoError):
+    """Ollama is not running or unreachable."""
+    pass
+
+
+class IndexError_(ChronoError):
+    """Indexing failure (named with underscore to avoid shadowing builtin)."""
+    pass
+
+
+class ParseError(ChronoError):
+    """Session file parsing failure."""
+    pass
+
+
+class DatabaseError(ChronoError):
+    """ChromaDB corruption or access failure."""
+    pass
+
+
+# ============================================================
 # Version Info
 # ============================================================
 

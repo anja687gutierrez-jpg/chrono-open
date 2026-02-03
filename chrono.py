@@ -16,6 +16,7 @@ Time Gates, Epoch navigation, and Techs coming in future phases!
 """
 
 import sys
+import os
 import argparse
 import json
 import warnings
@@ -25,9 +26,7 @@ from datetime import datetime
 # Suppress urllib3 NotOpenSSLWarning (noisy on macOS with LibreSSL)
 warnings.filterwarnings("ignore", message=".*urllib3.*OpenSSL.*")
 
-from embedding_service import EmbeddingService
-from vector_store import SessionVectorStore
-from summary_store import SummaryStore
+# Core imports (lightweight — no heavy deps)
 from chrono_utils import (
     ERAS, Era, FUTURE, END_OF_TIME, RESET, BOLD, DIM, CYAN,
     classify_era, get_era_by_code, get_era_date_range,
@@ -36,12 +35,57 @@ from chrono_utils import (
     format_timestamp_relative, get_era_summary,
     term_width, separator, truncate, status_line, box_header
 )
-from session_exploder import explode_session, format_exploded_view
-from session_graph import graph_command, graph_project_command, find_related_sessions
-from session_similarity import find_similar_sessions, format_similar_sessions
-from ascii_tree import create_session_tree_view
-from html_export import generate_html_explorer
-from chrono_welcome import show_welcome_menu
+
+# Heavy imports deferred for fast startup on non-search commands (gate, tech, lavos, git)
+# These are imported on first use via the functions below.
+_embedding_service = None
+_vector_store = None
+_summary_store = None
+
+
+def EmbeddingService():
+    """Lazy loader for EmbeddingService."""
+    global _embedding_service
+    if _embedding_service is None:
+        from embedding_service import EmbeddingService as _ES
+        _embedding_service = _ES
+    return _embedding_service()
+
+
+def SessionVectorStore():
+    """Lazy loader for SessionVectorStore."""
+    global _vector_store
+    if _vector_store is None:
+        from vector_store import SessionVectorStore as _SVS
+        _vector_store = _SVS
+    return _vector_store()
+
+
+def SummaryStore():
+    """Lazy loader for SummaryStore."""
+    global _summary_store
+    if _summary_store is None:
+        from summary_store import SummaryStore as _SS
+        _summary_store = _SS
+    return _summary_store()
+
+
+def _lazy_import_session_tools():
+    """Import session analysis tools on demand."""
+    from session_exploder import explode_session, format_exploded_view
+    from session_graph import graph_command, graph_project_command, find_related_sessions
+    from session_similarity import find_similar_sessions, format_similar_sessions
+    from ascii_tree import create_session_tree_view
+    return {
+        'explode_session': explode_session,
+        'format_exploded_view': format_exploded_view,
+        'graph_command': graph_command,
+        'graph_project_command': graph_project_command,
+        'find_related_sessions': find_related_sessions,
+        'find_similar_sessions': find_similar_sessions,
+        'format_similar_sessions': format_similar_sessions,
+        'create_session_tree_view': create_session_tree_view,
+    }
 from pathlib import Path
 import subprocess
 
@@ -433,10 +477,11 @@ def explode_command(session_arg: str) -> bool:
         print(f"  {DIM}Example: chrono explode bf695425{RESET}\n")
         return False
 
+    tools = _lazy_import_session_tools()
     with status_line(f"Exploding session #{session_path.stem[:12]}"):
-        exploded = explode_session(session_path)
+        exploded = tools['explode_session'](session_path)
     if exploded:
-        print(format_exploded_view(exploded))
+        print(tools['format_exploded_view'](exploded))
         return True
     else:
         print(f"  {BOLD}⚠ Could not explode session{RESET}")
@@ -455,9 +500,10 @@ def similar_command(session_arg: str) -> bool:
     Returns:
         True if session was found
     """
+    tools = _lazy_import_session_tools()
     with status_line(f"Finding sessions similar to #{session_arg[:12]}"):
-        similar = find_similar_sessions(session_arg)
-    print(format_similar_sessions(session_arg, similar))
+        similar = tools['find_similar_sessions'](session_arg)
+    print(tools['format_similar_sessions'](session_arg, similar))
 
     if similar:
         print(f"\n{BOLD}Quick Commands:{RESET}")
@@ -479,15 +525,16 @@ def tree_command(session_arg: str) -> bool:
     Returns:
         True if session was found
     """
+    tools = _lazy_import_session_tools()
     with status_line(f"Building session tree for #{session_arg[:12]}"):
         # Get related sessions
-        target, related = find_related_sessions(session_arg)
+        target, related = tools['find_related_sessions'](session_arg)
     if not target:
         print(f"\n  {BOLD}⚠ Session not found:{RESET} {session_arg}")
         return False
 
     # Get similar sessions
-    similar = find_similar_sessions(session_arg, top_k=4)
+    similar = tools['find_similar_sessions'](session_arg, top_k=4)
 
     # Build root session dict
     root_session = {
@@ -503,7 +550,7 @@ def tree_command(session_arg: str) -> bool:
         for n, r, s in related
     ]
 
-    print(create_session_tree_view(root_session, related_dicts, similar))
+    print(tools['create_session_tree_view'](root_session, related_dicts, similar))
     return True
 
 
@@ -523,6 +570,7 @@ def export_command(output_path: str = None) -> bool:
     print(f"\n  {BOLD}🎨 Generating interactive HTML explorer...{RESET}\n")
 
     try:
+        from html_export import generate_html_explorer
         path = generate_html_explorer(output_path, include_relationships=True)
         print(f"\n  {BOLD}✅ Export complete!{RESET}")
         print(f"  {DIM}Open in browser:{RESET} open {path}\n")
@@ -579,29 +627,105 @@ def interactive_mode_chrono(query: str, sessions: List[Dict]):
 
 
 # ============================================================
-# Error Handling Helpers
+# Status Command
 # ============================================================
 
-def _is_ollama_connection_error(exc: Exception) -> bool:
-    """Check if an exception is caused by Ollama not running."""
-    err_str = str(exc).lower()
-    if isinstance(exc, ConnectionError) or isinstance(exc, ConnectionRefusedError):
-        return True
-    if "connection refused" in err_str or "connect call failed" in err_str:
-        return True
-    if "ollama" in err_str and ("refused" in err_str or "failed" in err_str or "unavailable" in err_str):
-        return True
-    # RuntimeError wrapping ConnectionError from embedding_service
-    if isinstance(exc, RuntimeError) and "embedding failed" in err_str:
-        return True
-    return False
+def status_command() -> None:
+    """Show a quick health check of the Chrono system."""
+    import shutil
+    from chrono_config import get_data_dir
 
+    data_dir = get_data_dir()
+    print(f"\n  {BOLD}⏰ CHRONO STATUS{RESET}")
+    print(separator("─", 2))
+
+    # 1. Data directory size
+    dir_size = 0
+    try:
+        for f in data_dir.rglob("*"):
+            if f.is_file():
+                dir_size += f.stat().st_size
+    except OSError:
+        pass
+    size_mb = dir_size / (1024 * 1024)
+
+    # 2. ChromaDB stats
+    try:
+        store = SessionVectorStore()
+        stats = store.get_stats()
+        sessions = stats.get("unique_sessions", 0)
+        chunks = stats.get("total_chunks", 0)
+        projects = stats.get("unique_projects", 0)
+        db_ok = True
+    except Exception:
+        sessions = chunks = projects = 0
+        db_ok = False
+
+    # 3. Ollama status
+    ollama_ok = False
+    try:
+        import urllib.request
+        req = urllib.request.Request("http://localhost:11434/api/tags", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            ollama_ok = resp.status == 200
+    except Exception:
+        pass
+
+    # 4. Last index time (from indexed_sessions.json mtime)
+    index_cache = data_dir / "indexed_sessions.json"
+    last_indexed = "never"
+    if index_cache.exists():
+        try:
+            from chrono_utils import format_timestamp_relative
+            from datetime import datetime, timezone
+            mtime = index_cache.stat().st_mtime
+            dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+            last_indexed = format_timestamp_relative(dt.isoformat())
+        except Exception:
+            last_indexed = "unknown"
+
+    # 5. Gates count
+    gates_file = data_dir / "gates.json"
+    gate_count = 0
+    if gates_file.exists():
+        try:
+            import json
+            gates_data = json.loads(gates_file.read_text())
+            gate_count = len(gates_data.get("gates", {}))
+        except Exception:
+            pass
+
+    # Display
+    db_status = f"✅ {sessions} sessions ({chunks} chunks, {projects} projects)" if db_ok else "❌ ChromaDB error"
+    ollama_status = "✅ running" if ollama_ok else "❌ not running"
+
+    print(f"  {BOLD}{'Index:':<18}{RESET} {db_status}")
+    print(f"  {BOLD}{'Ollama:':<18}{RESET} {ollama_status}")
+    print(f"  {BOLD}{'Last indexed:':<18}{RESET} {last_indexed}")
+    print(f"  {BOLD}{'Time Gates:':<18}{RESET} {gate_count} bookmarks")
+    print(f"  {BOLD}{'Data size:':<18}{RESET} {size_mb:.1f} MB")
+    print(f"  {BOLD}{'Data dir:':<18}{RESET} {DIM}{data_dir}{RESET}")
+
+    # Quick suggestions if something is wrong
+    if not ollama_ok:
+        print(f"\n  {DIM}💡 Start Ollama: ollama serve{RESET}")
+    if chunks == 0 and db_ok:
+        print(f"\n  {DIM}💡 Build your index: chrono index{RESET}")
+
+    print()
+
+
+# ============================================================
+# Error Handling Helpers
+# ============================================================
 
 # ============================================================
 # Main CLI
 # ============================================================
 
 def main():
+    from chrono_config import OllamaError, DatabaseError
+
     try:
         _main_inner()
     except KeyboardInterrupt:
@@ -612,22 +736,32 @@ def main():
         print(f"\n{BOLD}⚠ Missing dependency:{RESET} {pkg}")
         print(f"  Run: pip install {pkg}")
         sys.exit(1)
+    except OllamaError as e:
+        print(f"\n{BOLD}⚠ Ollama Error:{RESET} {e}")
+        print(f"  Ollama is required for semantic search embeddings.")
+        print(f"  Start it with: ollama serve")
+        print(f"  Then retry your command.\n")
+        sys.exit(1)
+    except DatabaseError as e:
+        print(f"\n{BOLD}⚠ Database Error:{RESET} {e}")
+        print(f"  {DIM}Run 'chrono index --reindex' to rebuild the search index{RESET}\n")
+        sys.exit(1)
     except Exception as e:
-        if _is_ollama_connection_error(e):
-            print(f"\n{BOLD}⚠ Cannot connect to Ollama{RESET}")
-            print(f"  Ollama is required for semantic search embeddings.")
-            print(f"  Start it with: ollama serve")
-            print(f"  Then retry your command.\n")
-            sys.exit(1)
         # Unexpected error — show one-line message, not full traceback
         print(f"\n{BOLD}⚠ Error:{RESET} {e}")
         print(f"  {DIM}Run 'chrono --help' for usage info{RESET}\n")
         sys.exit(1)
 
 
+_config_validated = False
+
 def _check_first_run() -> bool:
-    """Check if Chrono has been set up. Returns True if ready, False if first run."""
-    from chrono_config import get_data_dir
+    """Check if Chrono has been set up. Returns True if ready, False if first run.
+
+    Also validates writability and JSON integrity (once per process).
+    """
+    global _config_validated
+    from chrono_config import get_data_dir, get_indexed_sessions_path, safe_load_json
     data_dir = get_data_dir()
     chroma_dir = data_dir / "chroma"
 
@@ -650,6 +784,26 @@ def _check_first_run() -> bool:
         print(f"  {DIM}Data will be stored in: {data_dir}{RESET}")
         print(f"  {DIM}Indexing scans: ~/.claude/projects/ for session files{RESET}\n")
         return False
+
+    # One-time validation (skip on repeat calls within same process)
+    if not _config_validated:
+        _config_validated = True
+
+        # Check data dir is writable
+        if not os.access(str(data_dir), os.W_OK):
+            print(f"\n{BOLD}⚠ Data directory is not writable:{RESET} {data_dir}")
+            print(f"  {DIM}Fix with: chmod u+w {data_dir}{RESET}\n")
+            return False
+
+        # Validate indexed_sessions.json if it exists
+        idx_path = get_indexed_sessions_path()
+        if idx_path.exists():
+            data = safe_load_json(idx_path)
+            if data is None:
+                print(f"\n{BOLD}⚠ Index cache is corrupted:{RESET} {idx_path.name}")
+                print(f"  {DIM}This will auto-heal on next index run.{RESET}")
+                print(f"  {DIM}Run: chrono index{RESET}\n")
+
     return True
 
 
@@ -787,6 +941,11 @@ def _main_inner():
         show_eras_command(store)
         return
 
+    # Handle 'status' subcommand - Quick health check
+    if query_str.lower() == "status":
+        status_command()
+        return
+
     # Handle 'explode' subcommand
     if query_str.lower().startswith("explode"):
         parts = query_str.split(None, 1)  # Split into ["explode", "<session_id>"]
@@ -808,6 +967,7 @@ def _main_inner():
         # If --project was used, argparse consumed it and set args.project
         # query would be "graph <project_name>" where project_name == args.project
         if args.project:
+            from session_graph import graph_project_command
             graph_project_command(args.project)
             return
 
@@ -821,6 +981,7 @@ def _main_inner():
             sys.exit(1)
 
         # Session ID is the second word
+        from session_graph import graph_command
         graph_command(parts[1])
         return
 
@@ -859,19 +1020,50 @@ def _main_inner():
             print(f"  {BOLD}Usage:{RESET}")
             print(f"    chrono index                  {DIM}Index new sessions only{RESET}")
             print(f"    chrono index --reindex        {DIM}Rebuild entire index from scratch{RESET}")
+            print(f"    chrono index --stats          {DIM}Show index statistics{RESET}")
+            print(f"    chrono index --quiet          {DIM}Silent mode (errors only){RESET}")
             print(f"    chrono index <session-id>     {DIM}Index/re-index a single session{RESET}")
             print(f"\n  {DIM}Requires Ollama running (ollama serve){RESET}\n")
             return
+
+        # --stats: show stats and exit
+        if "--stats" in parts:
+            from indexer import SessionIndexer
+            indexer = SessionIndexer()
+            stats = indexer.store.get_stats()
+            indexed = indexer.get_indexed_sessions()
+            print(f"\n  {BOLD}⏰ Index Statistics{RESET}")
+            print(separator("═", 2))
+            for key, value in stats.items():
+                label = key.replace("_", " ").title()
+                print(f"  {label + ':':<22} {value}")
+            print(f"  {'Indexed Sessions:':<22} {len(indexed)}")
+            integrity = indexer.verify_cache_integrity(verbose=True)
+            print()
+            return
+
         reindex = "--reindex" in parts or "-r" in parts
+        quiet = "--quiet" in parts or "-q" in parts
+
         # Check for single session ID (e.g., "chrono index 4717c89a")
         single_session = None
+        known_flags = {"--reindex", "-r", "--quiet", "-q", "--stats", "index"}
         for part in parts[1:]:
-            if part not in ("--reindex", "-r") and not part.startswith("-"):
+            if part not in known_flags and not part.startswith("-"):
                 single_session = part
                 break
-        from indexer import SessionIndexer
-        indexer = SessionIndexer()
-        indexer.index_all(reindex=reindex, single_session=single_session)
+
+        # Quiet mode: suppress stdout during indexing
+        if quiet:
+            import io, contextlib
+            with contextlib.redirect_stdout(io.StringIO()):
+                from indexer import SessionIndexer
+                indexer = SessionIndexer()
+                indexer.index_all(reindex=reindex, single_session=single_session)
+        else:
+            from indexer import SessionIndexer
+            indexer = SessionIndexer()
+            indexer.index_all(reindex=reindex, single_session=single_session)
         return
 
     # Handle 'gate' subcommand - Time gates (forward to gates.py)
@@ -980,6 +1172,7 @@ def _main_inner():
 
     # If no query, show interactive welcome menu
     if not args.query or not query_str.strip():
+        from chrono_welcome import show_welcome_menu
         command = show_welcome_menu()
         if command:
             # Execute the selected command
