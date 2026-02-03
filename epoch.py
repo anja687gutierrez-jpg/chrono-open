@@ -33,7 +33,7 @@ from pathlib import Path
 from chrono_utils import (
     ERAS, RESET, BOLD, DIM,
     classify_era, format_timestamp_relative,
-    parse_flexible_date
+    parse_flexible_date, separator
 )
 
 
@@ -138,7 +138,8 @@ def cmd_status() -> None:
             changes += f" ~{unstaged} unstaged"
 
     print(f"\n  {BOLD}🚀 EPOCH STATUS - Current Position in Timeline{RESET}")
-    print(f"  {'═' * 55}\n")
+    print(separator("═", 2))
+    print()
 
     print(f"  {BOLD}Repository:{RESET}  {repo_name}")
     print(f"  {BOLD}Branch:{RESET}      {branch}{ahead_behind}")
@@ -149,7 +150,7 @@ def cmd_status() -> None:
     if changes:
         print(f"  {BOLD}Changes:{RESET}    {changes.strip()}")
 
-    print(f"\n  {'─' * 55}")
+    print("\n" + separator("─", 2))
     print(f"  {DIM}epoch log      - View commit history{RESET}")
     print(f"  {DIM}epoch branches - List all branches{RESET}")
     print(f"  {DIM}epoch timeline - Visual timeline{RESET}\n")
@@ -176,7 +177,8 @@ def cmd_log(count: int = 10, all_branches: bool = False, oneline: bool = False) 
     branch = get_current_branch()
 
     print(f"\n  {BOLD}🚀 EPOCH LOG - {repo_name} ({branch}){RESET}")
-    print(f"  {'═' * 60}\n")
+    print(separator("═", 2))
+    print()
 
     commits = output.strip().split('\n')
     current_era = None
@@ -203,16 +205,16 @@ def cmd_log(count: int = 10, all_branches: bool = False, oneline: bool = False) 
             current_era = era
             if i > 0:
                 print()
-            print(f"  {era.color}{'─' * 56}{RESET}")
+            print(separator("─", 2, era.color))
             print(f"  {era.color}{BOLD}{era.emoji} {era.name.upper()} - {era.time_period}{RESET}")
-            print(f"  {era.color}{'─' * 56}{RESET}")
+            print(separator("─", 2, era.color))
 
         # Format commit
         marker = "●" if i == 0 else "○"
         print(f"\n  {era.color}{marker}{RESET} {BOLD}{short_hash}{RESET} {message[:45]}{'...' if len(message) > 45 else ''}")
         print(f"    {DIM}{author} • {rel_time}{RESET}")
 
-    print(f"\n  {'─' * 60}")
+    print("\n" + separator("─", 2))
     print(f"  {DIM}Showing {len(commits)} commits{RESET}")
     print(f"  {DIM}epoch log -n 20   - Show more commits{RESET}")
     print(f"  {DIM}epoch log --all   - Include all branches{RESET}\n")
@@ -260,11 +262,12 @@ def cmd_jump(target: str, create_branch: Optional[str] = None) -> None:
 
     if success:
         print(f"\n  {BOLD}🚀 EPOCH JUMP{RESET}")
-        print(f"  {'─' * 50}")
+        print(separator("─", 2))
         print(f"  {BOLD}{action}:{RESET}")
         print(f"  {era.emoji} {target[:12]} - {target_msg[:40]}{'...' if len(target_msg) > 40 else ''}")
         print(f"  {DIM}Era: {era.time_period} ({rel_time}){RESET}")
-        print(f"  {'─' * 50}\n")
+        print(separator("─", 2))
+        print()
     else:
         print(f"\n  {BOLD}Error:{RESET} Jump failed.")
         print(f"  {DIM}{output}{RESET}\n")
@@ -301,9 +304,10 @@ def cmd_compare(range_str: str) -> None:
     success5, files_changed = run_git(["diff", "--name-only", f"{base}..{head}"])
 
     print(f"\n  {BOLD}🚀 EPOCH COMPARE{RESET}")
-    print(f"  {'═' * 55}")
+    print(separator("═", 2))
     print(f"  {BOLD}Comparing:{RESET} {base} → {head}")
-    print(f"  {'─' * 55}\n")
+    print(separator("─", 2))
+    print()
 
     print(f"  {BOLD}Commits:{RESET}")
     print(f"    {head} is {BOLD}{ahead_count}{RESET} commits ahead of {base}")
@@ -322,7 +326,7 @@ def cmd_compare(range_str: str) -> None:
         if len(files_changed.strip().split('\n')) > 10:
             print(f"    {DIM}... and {len(files_changed.strip().split(chr(10))) - 10} more{RESET}")
 
-    print(f"\n  {'─' * 55}")
+    print("\n" + separator("─", 2))
     print(f"  {DIM}Full diff: git diff {base}..{head}{RESET}")
     print(f"  {DIM}Commits:   git log {base}..{head} --oneline{RESET}\n")
 
@@ -349,7 +353,8 @@ def cmd_branches() -> None:
     repo_name = get_repo_name()
 
     print(f"\n  {BOLD}🚀 EPOCH BRANCHES - {repo_name}{RESET}")
-    print(f"  {'═' * 60}\n")
+    print(separator("═", 2))
+    print()
 
     branches = output.strip().split('\n')
     current_era = None
@@ -368,7 +373,7 @@ def cmd_branches() -> None:
         if era.code != (current_era.code if current_era else None):
             current_era = era
             print(f"  {era.color}{era.emoji} {era.name.upper()} - {era.time_period}{RESET}")
-            print(f"  {era.color}{'─' * 56}{RESET}")
+            print(separator("─", 2, era.color))
 
         # Mark current branch
         marker = "→" if branch_name == current else " "
@@ -377,7 +382,7 @@ def cmd_branches() -> None:
         print(f"  {marker} {BOLD}{branch_name}{RESET}{current_marker}")
         print(f"    {DIM}{message[:40]}{'...' if len(message) > 40 else ''} • {rel_time}{RESET}")
 
-    print(f"\n  {'─' * 60}")
+    print("\n" + separator("─", 2))
     print(f"  {BOLD}Total: {len(branches)} branches{RESET}")
     print(f"  {DIM}epoch jump <branch>  - Switch to branch{RESET}\n")
 
@@ -406,13 +411,14 @@ def cmd_timeline(count: int = 15) -> None:
     repo_name = get_repo_name()
 
     print(f"\n  {BOLD}🚀 EPOCH TIMELINE - {repo_name}{RESET}")
-    print(f"  {'═' * 60}\n")
+    print(separator("═", 2))
+    print()
 
     # Print the graph
     for line in output.split('\n'):
         print(f"  {line}")
 
-    print(f"\n  {'─' * 60}")
+    print("\n" + separator("─", 2))
     print(f"  {DIM}epoch timeline -n 30  - Show more history{RESET}")
     print(f"  {DIM}epoch log             - Detailed commit view{RESET}\n")
 
@@ -431,7 +437,8 @@ def cmd_stash(action: str = "list", message: str = "") -> None:
             return
 
         print(f"\n  {BOLD}🚀 EPOCH STASH - Temporal Storage{RESET}")
-        print(f"  {'═' * 50}\n")
+        print(separator("═", 2))
+        print()
 
         for line in output.strip().split('\n'):
             print(f"  {line}")

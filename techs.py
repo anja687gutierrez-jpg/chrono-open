@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime
 
-from chrono_utils import RESET, BOLD, DIM
+from chrono_utils import RESET, BOLD, DIM, RED, WARNING, separator
 
 
 # ============================================================
@@ -386,6 +386,23 @@ def run_command(command: str, dry_run: bool = False) -> Tuple[bool, str]:
         return False, str(e)
 
 
+def _format_error_output(output: str, max_lines: int = 20) -> None:
+    """Display command failure output in a formatted error block."""
+    if not output or not output.strip():
+        return
+    from chrono_utils import term_width
+    box_w = term_width() - 4  # 2-space indent + box chars
+    lines = output.strip().split('\n')
+    print(f"  {RED}┌{'─' * box_w}┐{RESET}")
+    for line in lines[:max_lines]:
+        # Truncate long lines to fit inside box
+        display = line[:box_w - 2] if len(line) > box_w - 2 else line
+        print(f"  {RED}│{RESET} {display}")
+    if len(lines) > max_lines:
+        print(f"  {RED}│{RESET} {DIM}... ({len(lines) - max_lines} more lines){RESET}")
+    print(f"  {RED}└{'─' * box_w}┘{RESET}")
+
+
 def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> bool:
     """Execute a tech by ID."""
     project_type = detect_project_type()
@@ -397,11 +414,11 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
 
         print(f"\n  {tech['element']} {BOLD}{tech['name']}{RESET} ({tech['character']})")
         print(f"  {DIM}{tech['description']}{RESET}")
-        print(f"  {'─' * 50}")
+        print(separator("─", 2))
 
         # Warn if no project detected
         if is_fallback and project_type == "default":
-            print(f"  \033[38;5;208m⚠ No project detected in this directory{RESET}")  # Orange
+            print(f"  {WARNING}⚠ No project detected in this directory{RESET}")
             print(f"  {DIM}Looking for: package.json, pyproject.toml, Cargo.toml, go.mod{RESET}")
 
         if verbose or dry_run:
@@ -409,7 +426,9 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
 
         success, output = run_command(command, dry_run)
 
-        if output and (verbose or not success):
+        if not success and output:
+            _format_error_output(output)
+        elif output and verbose:
             for line in output.split('\n')[:20]:
                 print(f"  {line}")
             if len(output.split('\n')) > 20:
@@ -429,7 +448,7 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
         print(f"\n  {tech['element']} {BOLD}{tech['name']}{RESET}")
         print(f"  {DIM}Dual Tech: {' + '.join(tech['characters'])}{RESET}")
         print(f"  {DIM}{tech['description']}{RESET}")
-        print(f"  {'═' * 50}")
+        print(separator("═", 2))
 
         all_success = True
         for sub_tech_id in tech["techs"]:
@@ -439,32 +458,34 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
                     print(f"  {BOLD}✗ Dual Tech failed at {sub_tech_id}{RESET}\n")
                     return False
 
-        print(f"  {'═' * 50}")
+        print(separator("═", 2))
         print(f"  {BOLD}✓ Dual Tech Complete!{RESET}\n")
         return all_success
 
     # Check triple techs
     if tech_id in TRIPLE_TECHS:
         tech = TRIPLE_TECHS[tech_id]
-        command = get_command_for_project(tech, project_type)
+        command, is_fallback = get_command_for_project(tech, project_type)
 
         print(f"\n  {tech['element']} {BOLD}{tech['name']}{RESET} ⭐ TRIPLE TECH ⭐")
         print(f"  {DIM}Characters: {' + '.join(tech['characters'])}{RESET}")
         print(f"  {DIM}{tech['description']}{RESET}")
-        print(f"  {'═' * 50}")
+        print(separator("═", 2))
 
         if verbose or dry_run:
             print(f"  {DIM}Command: {command}{RESET}")
 
         success, output = run_command(command, dry_run)
 
-        if output and (verbose or not success):
+        if not success and output:
+            _format_error_output(output, max_lines=30)
+        elif output and verbose:
             for line in output.split('\n')[:30]:
                 print(f"  {line}")
             if len(output.split('\n')) > 30:
                 print(f"  {DIM}... (output truncated){RESET}")
 
-        print(f"  {'═' * 50}")
+        print(separator("═", 2))
         status = "✓ TRIPLE TECH COMPLETE!" if success else "✗ Triple Tech Failed"
         print(f"  {BOLD}{status}{RESET}\n")
         return success
@@ -477,16 +498,20 @@ def execute_tech(tech_id: str, dry_run: bool = False, verbose: bool = False) -> 
 
         print(f"\n  🎮 {BOLD}{tech.get('name', tech_id)}{RESET} (Custom Tech)")
         print(f"  {DIM}{tech.get('description', 'Custom workflow')}{RESET}")
-        print(f"  {'─' * 50}")
+        print(separator("─", 2))
 
         if verbose or dry_run:
             print(f"  {DIM}Command: {command}{RESET}")
 
         success, output = run_command(command, dry_run)
 
-        if output and (verbose or not success):
+        if not success and output:
+            _format_error_output(output)
+        elif output and verbose:
             for line in output.split('\n')[:20]:
                 print(f"  {line}")
+            if len(output.split('\n')) > 20:
+                print(f"  {DIM}... (output truncated){RESET}")
 
         status = "✓ Success" if success else "✗ Failed"
         print(f"\n  {BOLD}{status}{RESET}\n")
@@ -513,6 +538,12 @@ def save_custom_techs(techs: Dict[str, Any]) -> None:
 
 def add_custom_tech(name: str, command: str, description: str = "") -> None:
     """Add a custom tech."""
+    if not command or not command.strip():
+        print(f"\n  {BOLD}Error:{RESET} Command cannot be empty.")
+        print(f"  {DIM}Usage: tech custom <name> \"<command>\"{RESET}")
+        print(f"  {DIM}Example: tech custom my-flow \"npm run build && npm test\"{RESET}\n")
+        return
+
     techs = load_custom_techs()
     techs[name] = {
         "name": name,
@@ -546,7 +577,8 @@ def list_techs(category: Optional[str] = None) -> None:
 
     print(f"\n  {BOLD}⚔️ AVAILABLE TECHS{RESET}")
     print(f"  {DIM}Project type: {project_type}{RESET}")
-    print(f"  {'═' * 55}\n")
+    print(separator("═", 2))
+    print()
 
     # Single Techs
     if not category or category == "single":
@@ -592,7 +624,7 @@ def list_techs(category: Optional[str] = None) -> None:
             print(f"  🎮 {BOLD}{tech_id:15}{RESET} {DIM}{tech.get('description', '')}{RESET}")
         print()
 
-    print(f"  {'─' * 55}")
+    print(separator("─", 2))
     print(f"  {DIM}Usage: tech <name>           - Execute a tech{RESET}")
     print(f"  {DIM}       tech <name> --dry-run - Preview without running{RESET}")
     print(f"  {DIM}       tech custom <name> \"<command>\" - Create custom{RESET}\n")

@@ -137,6 +137,38 @@ ACCENT = MAGENTA
 HIGHLIGHT = CYAN
 
 
+# ============================================================
+# Terminal Width Helpers
+# ============================================================
+
+def term_width(default: int = 80) -> int:
+    """Get current terminal width, clamped to a sane range.
+
+    Returns usable width (min 60, max 120) with fallback to default.
+    """
+    import shutil
+    try:
+        w = shutil.get_terminal_size((default, 24)).columns
+    except (ValueError, OSError):
+        w = default
+    return max(60, min(120, w))
+
+
+def separator(char: str = "─", indent: int = 2, color: str = "") -> str:
+    """Build a separator line that fits the terminal width.
+
+    Args:
+        char: The repeated character (─, ═, ━, =, etc.)
+        indent: Number of leading spaces
+        color: Optional ANSI color string to wrap the line
+    """
+    fill = term_width() - indent
+    line = " " * indent + char * fill
+    if color:
+        return f"{color}{line}{RESET}"
+    return line
+
+
 def get_era_by_code(code: str) -> Optional[Era]:
     """Get an era by its code name."""
     code_lower = code.lower().replace("-", "_").replace(" ", "_")

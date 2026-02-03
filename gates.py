@@ -26,7 +26,8 @@ from typing import Optional, Dict, List, Any
 
 from chrono_utils import (
     END_OF_TIME, RESET, BOLD, DIM,
-    classify_era, format_timestamp_relative
+    classify_era, format_timestamp_relative,
+    separator
 )
 from chrono_config import get_gates_path, atomic_write_json, safe_load_json
 
@@ -102,6 +103,12 @@ def cmd_save(name: str, session_id: Optional[str] = None, notes: str = "") -> No
     """Save a session as a named Time Gate."""
 
     # Validate name
+    if not name or not name.strip():
+        print(f"\n  {BOLD}Error:{RESET} Gate name cannot be empty.")
+        print(f"  {DIM}Usage: gate save <name> [session-id]{RESET}")
+        print(f"  {DIM}Example: gate save my-auth-session{RESET}")
+        return
+
     if not validate_gate_name(name):
         print(f"\n  {BOLD}Error:{RESET} Gate name can only contain letters, numbers, hyphens, and underscores.")
         print(f"  {DIM}Example: my-auth-session, dashboard_v2, feature123{RESET}")
@@ -152,14 +159,14 @@ def cmd_save(name: str, session_id: Optional[str] = None, notes: str = "") -> No
     rel_time = format_timestamp_relative(timestamp)
 
     print(f"\n  {END_OF_TIME.color}{END_OF_TIME.emoji} TIME GATE CREATED{RESET}")
-    print(f"  {'─' * 50}")
+    print(separator("─", 2))
     print(f"  {BOLD}Name:{RESET}     {name}")
     print(f"  {BOLD}Session:{RESET}  #{session_id[:8]}...")
     print(f"  {BOLD}Project:{RESET}  {project}")
     print(f"  {BOLD}Era:{RESET}      {era.emoji} {era.time_period} ({rel_time})")
     if notes:
         print(f"  {BOLD}Notes:{RESET}    {notes}")
-    print(f"  {'─' * 50}")
+    print(separator("─", 2))
     print(f"\n  {DIM}Jump to this gate anytime:{RESET} gate jump {name}\n")
 
 
@@ -170,7 +177,7 @@ def cmd_list() -> None:
 
     print(f"\n  {END_OF_TIME.color}{BOLD}")
     print(f"  ⏳ END OF TIME - Your Bookmarked Sessions")
-    print(f"  {'═' * 55}{RESET}\n")
+    print(separator("═", 2) + "\n")
 
     if not gates:
         print(f"  {DIM}No Time Gates saved yet.{RESET}")
@@ -196,12 +203,14 @@ def cmd_list() -> None:
         rel_time = format_timestamp_relative(timestamp)
 
         print(f"  {BOLD}› {name}{RESET}")
-        print(f"    {era.color}{era.emoji} {era.time_period}{RESET} │ #{session_id[:8]} │ {project} │ {rel_time}")
+        # Pad era and truncate project for aligned columns
+        proj_display = project[:20] if len(project) > 20 else project
+        print(f"    {era.color}{era.emoji} {era.time_period:<15}{RESET} │ #{session_id[:8]} │ {proj_display:<20} │ {rel_time}")
         if notes:
             print(f"    {DIM}📝 {notes}{RESET}")
         print()
 
-    print(f"  {DIM}{'─' * 55}{RESET}")
+    print(separator("─", 2, DIM))
     print(f"  {BOLD}Total: {len(gates)} gates{RESET}\n")
 
     # Quick reference
@@ -218,12 +227,16 @@ def cmd_jump(name: str) -> None:
     if name not in gates:
         print(f"\n  {BOLD}Error:{RESET} Gate '{name}' not found.")
 
-        # Suggest similar names
+        # Suggest similar names (substring match)
         similar = [n for n in gates.keys() if name.lower() in n.lower()]
         if similar:
             print(f"  {DIM}Did you mean: {', '.join(similar)}?{RESET}")
+        elif gates:
+            # Show all available gates as suggestions
+            gate_names = sorted(gates.keys())
+            print(f"  {DIM}Available gates: {', '.join(gate_names)}{RESET}")
         else:
-            print(f"  {DIM}Use 'gate list' to see all gates.{RESET}")
+            print(f"  {DIM}No gates saved yet. Create one: gate save <name>{RESET}")
         return
 
     gate = gates[name]
@@ -235,11 +248,11 @@ def cmd_jump(name: str) -> None:
     rel_time = format_timestamp_relative(timestamp)
 
     print(f"\n  {END_OF_TIME.color}{END_OF_TIME.emoji} ACTIVATING TIME GATE: {name}{RESET}")
-    print(f"  {'─' * 50}")
+    print(separator("─", 2))
     print(f"  {BOLD}Destination:{RESET} {era.emoji} {era.time_period} ({rel_time})")
     print(f"  {BOLD}Project:{RESET}     {project}")
     print(f"  {BOLD}Session:{RESET}     #{session_id[:8]}...")
-    print(f"  {'─' * 50}")
+    print(separator("─", 2))
     print(f"\n  {BOLD}⚡ Jump command:{RESET}")
     print(f"  claude --continue {session_id}\n")
 
@@ -321,7 +334,7 @@ def cmd_info(name: str) -> None:
     rel_time = format_timestamp_relative(timestamp)
 
     print(f"\n  {END_OF_TIME.color}{END_OF_TIME.emoji} TIME GATE: {name}{RESET}")
-    print(f"  {'═' * 50}")
+    print(separator("═", 2))
     print(f"  {BOLD}Session ID:{RESET}    {session_id}")
     print(f"  {BOLD}Project:{RESET}       {project}")
     print(f"  {BOLD}Era:{RESET}           {era.emoji} {era.name} ({era.time_period})")
@@ -329,7 +342,7 @@ def cmd_info(name: str) -> None:
     print(f"  {BOLD}Gate Created:{RESET}  {created}")
     if notes:
         print(f"  {BOLD}Notes:{RESET}         {notes}")
-    print(f"  {'═' * 50}")
+    print(separator("═", 2))
     print(f"\n  {DIM}Jump command:{RESET} claude --continue {session_id}\n")
 
 

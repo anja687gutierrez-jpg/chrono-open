@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Set, Optional, List, Dict
 from dataclasses import dataclass
 
+from chrono_utils import RESET, BOLD, WARNING
+
 
 @dataclass
 class ActiveSession:
@@ -120,18 +122,18 @@ def warn_duplicate_sessions() -> bool:
     if not duplicates:
         return False
 
-    print("\n\033[38;5;208m⚠️  WARNING: Duplicate sessions detected!\033[0m")  # Orange
+    print(f"\n{WARNING}⚠️  WARNING: Duplicate sessions detected!{RESET}")
     print("The following sessions are open in multiple terminals:\n")
 
     for session_id, sessions in duplicates.items():
-        print(f"  \033[1m#{session_id[:8]}\033[0m - {len(sessions)} instances:")
+        print(f"  {BOLD}#{session_id[:8]}{RESET} - {len(sessions)} instances:")
         for s in sessions:
             print(f"    PID {s.pid}")
 
-    print("\n\033[38;5;208mThis can cause:")  # Orange
+    print(f"\n{WARNING}This can cause:")
     print("  - Session file corruption")
     print("  - Indexing failures ('no content to index')")
-    print("  - Search returning stale results\033[0m")
+    print(f"  - Search returning stale results{RESET}")
     print("\nRecommendation: Close duplicate terminals before indexing.\n")
 
     return True

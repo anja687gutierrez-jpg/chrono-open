@@ -18,7 +18,10 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Set
 from datetime import datetime
 
-from chrono_utils import parse_timestamp, format_timestamp_relative
+from chrono_utils import (
+    parse_timestamp, format_timestamp_relative, separator,
+    RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY
+)
 from summary_store import SummaryStore
 
 
@@ -322,16 +325,12 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
 
     Like CADDY showing CAD components laid out.
     """
-    # Colors
+    # Colors (from chrono_utils; disabled when use_color=False)
     if use_color:
-        RESET = "\033[0m"
-        BOLD = "\033[1m"
-        DIM = "\033[2m"
-        CYAN = "\033[96m"
-        GREEN = "\033[92m"
-        YELLOW = "\033[94m"  # Blue (visible on light backgrounds)
-        MAGENTA = "\033[95m"
-        WHITE = "\033[90m"  # Dark gray (visible on light backgrounds)
+        # Local aliases reference chrono_utils module-level constants
+        # RESET, BOLD, DIM, CYAN, GREEN, MAGENTA already imported
+        YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
+        WHITE = GRAY     # "White" is actually dark gray for light-bg visibility
     else:
         RESET = BOLD = DIM = CYAN = GREEN = YELLOW = MAGENTA = WHITE = ""
 
@@ -361,7 +360,7 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
 
     # Goals
     lines.append(f"\n{BOLD}{GREEN}🎯 GOALS (What was asked){RESET}")
-    lines.append(f"{GREEN}{'─' * 50}{RESET}")
+    lines.append(separator("─", 0, GREEN))
     if exploded.goals:
         for i, goal in enumerate(exploded.goals, 1):
             lines.append(f"   {i}. {goal}")
@@ -370,7 +369,7 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
 
     # Files Touched
     lines.append(f"\n{BOLD}{YELLOW}📁 FILES TOUCHED{RESET}")
-    lines.append(f"{YELLOW}{'─' * 50}{RESET}")
+    lines.append(separator("─", 0, YELLOW))
 
     has_files = False
 
@@ -401,7 +400,7 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
 
     # Tools Used
     lines.append(f"\n{BOLD}{MAGENTA}🔧 TOOLS USED{RESET}")
-    lines.append(f"{MAGENTA}{'─' * 50}{RESET}")
+    lines.append(separator("─", 0, MAGENTA))
     if exploded.tools_used:
         # Sort by usage count
         sorted_tools = sorted(exploded.tools_used.items(), key=lambda x: x[1], reverse=True)
@@ -413,13 +412,13 @@ def format_exploded_view(exploded: ExplodedSession, use_color: bool = True) -> s
     # Decisions
     if exploded.decisions:
         lines.append(f"\n{BOLD}{WHITE}💡 DECISIONS MADE{RESET}")
-        lines.append(f"{WHITE}{'─' * 50}{RESET}")
+        lines.append(separator("─", 0, WHITE))
         for decision in exploded.decisions:
             lines.append(f"   • {decision}")
 
     # Outcome
     lines.append(f"\n{BOLD}{CYAN}🏁 OUTCOME{RESET}")
-    lines.append(f"{CYAN}{'─' * 50}{RESET}")
+    lines.append(separator("─", 0, CYAN))
     if exploded.outcome:
         lines.append(f"   {exploded.outcome}")
     else:

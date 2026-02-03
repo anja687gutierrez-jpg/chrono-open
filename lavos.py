@@ -31,7 +31,7 @@ from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime
 from dataclasses import dataclass, field
 
-from chrono_utils import FUTURE, RESET, BOLD, DIM
+from chrono_utils import FUTURE, RESET, BOLD, DIM, RED, WARNING, MAGENTA, CYAN, separator
 
 
 # ============================================================
@@ -51,10 +51,10 @@ class Issue:
 
 
 SEVERITY_COLORS = {
-    "critical": "\033[91m",      # Red
-    "high": "\033[38;5;208m",    # Orange (visible on light backgrounds)
-    "medium": "\033[95m",        # Magenta
-    "low": "\033[96m",           # Cyan
+    "critical": RED,
+    "high": WARNING,
+    "medium": MAGENTA,
+    "low": CYAN,
 }
 
 SEVERITY_EMOJI = {
@@ -445,7 +445,8 @@ def run_full_scan(verbose: bool = False) -> List[Issue]:
 
     print(f"\n  {FUTURE.emoji} {BOLD}LAVOS DETECTION - Scanning for Dormant Threats{RESET}")
     print(f"  {DIM}Project type: {project_type}{RESET}")
-    print(f"  {'═' * 55}\n")
+    print(separator("═", 2))
+    print()
 
     scanners = [
         ("Security vulnerabilities", scan_npm_security if project_type == "npm" else scan_python_security),
@@ -479,7 +480,8 @@ def run_quick_scan() -> List[Issue]:
     project_type = detect_project_type()
 
     print(f"\n  {FUTURE.emoji} {BOLD}LAVOS QUICK SCAN - Critical Threats Only{RESET}")
-    print(f"  {'═' * 55}\n")
+    print(separator("═", 2))
+    print()
 
     # Only run security and config scans
     print(f"  {DIM}Scanning security...{RESET}", end="", flush=True)
@@ -501,7 +503,7 @@ def run_quick_scan() -> List[Issue]:
 
 def display_results(issues: List[Issue]) -> None:
     """Display scan results."""
-    print(f"\n  {'═' * 55}")
+    print("\n" + separator("═", 2))
 
     if not issues:
         print(f"\n  {BOLD}✓ No threats detected!{RESET}")
@@ -544,7 +546,7 @@ def display_results(issues: List[Issue]) -> None:
         emoji = SEVERITY_EMOJI[severity]
 
         print(f"  {color}{emoji} {severity.upper()} ({len(severity_issues)}){RESET}")
-        print(f"  {color}{'─' * 53}{RESET}")
+        print(separator("─", 2, color))
 
         for issue in severity_issues[:10]:  # Limit display
             cat_emoji = CATEGORY_EMOJI.get(issue.category, "•")
@@ -558,7 +560,7 @@ def display_results(issues: List[Issue]) -> None:
         print()
 
     # Summary
-    print(f"  {'─' * 55}")
+    print(separator("─", 2))
     print(f"  {BOLD}SUMMARY:{RESET} {total} threats detected")
     print(f"  {SEVERITY_EMOJI['critical']} Critical: {critical}  {SEVERITY_EMOJI['high']} High: {high}  {SEVERITY_EMOJI['medium']} Medium: {len(by_severity['medium'])}  {SEVERITY_EMOJI['low']} Low: {len(by_severity['low'])}")
 
@@ -662,7 +664,8 @@ def main():
         issues = run_quick_scan()
     elif args.command == "deps":
         print(f"\n  {FUTURE.emoji} {BOLD}LAVOS - Dependency Scan{RESET}")
-        print(f"  {'═' * 55}\n")
+        print(separator("═", 2))
+        print()
         project_type = detect_project_type()
         if project_type == "npm":
             issues = scan_npm_deps()
@@ -670,7 +673,8 @@ def main():
             issues = scan_python_deps()
     elif args.command == "security":
         print(f"\n  {FUTURE.emoji} {BOLD}LAVOS - Security Scan{RESET}")
-        print(f"  {'═' * 55}\n")
+        print(separator("═", 2))
+        print()
         project_type = detect_project_type()
         if project_type == "npm":
             issues = scan_npm_security()

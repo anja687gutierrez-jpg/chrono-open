@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 
 from chrono_utils import (
-    ERAS, RESET, BOLD, DIM,
+    ERAS, RESET, BOLD, DIM, CYAN,
     classify_era, format_timestamp_relative, parse_timestamp
 )
 from summary_store import SummaryStore
@@ -170,7 +170,7 @@ def generate_predictions(recent_sessions: List[Dict]) -> List[Dict]:
 # ============================================================
 
 WELCOME_BANNER = f"""
-{BOLD}\033[96m
+{BOLD}{CYAN}
    ╔═══════════════════════════════════════════════════════════════╗
    ║                                                               ║
    ║   ⏰ CHRONO - Project Epoch                                   ║

@@ -7,7 +7,10 @@ Creates beautiful tree visualizations showing session relationships.
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
-from chrono_utils import classify_era, format_timestamp_relative, RESET, BOLD, DIM
+from chrono_utils import (
+    classify_era, format_timestamp_relative, separator,
+    RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY
+)
 
 
 @dataclass
@@ -161,11 +164,9 @@ def render_tree(
         ASCII tree string
     """
     if use_color:
-        CYAN = "\033[96m"
-        GREEN = "\033[92m"
-        YELLOW = "\033[94m"  # Blue (visible on light backgrounds)
-        MAGENTA = "\033[95m"
-        WHITE = "\033[90m"  # Dark gray (visible on light backgrounds)
+        # Local aliases reference chrono_utils module-level constants
+        YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
+        WHITE = GRAY     # "White" is actually dark gray for light-bg visibility
     else:
         CYAN = GREEN = YELLOW = MAGENTA = WHITE = ""
 
@@ -226,15 +227,14 @@ def render_tree(
 
 def format_tree_header(use_color: bool = True) -> str:
     """Format the tree visualization header."""
-    if use_color:
-        CYAN = "\033[96m"
-    else:
-        CYAN = ""
+    _cyan = CYAN if use_color else ""
+    _bold = BOLD if use_color else ""
+    _reset = RESET if use_color else ""
 
     return f"""
-{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}
-{BOLD}{CYAN}║  🌳 SESSION TREE - Visual Relationship Map                       {RESET}
-{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}
+{_bold}{_cyan}╔══════════════════════════════════════════════════════════════════╗{_reset}
+{_bold}{_cyan}║  🌳 SESSION TREE - Visual Relationship Map                       {_reset}
+{_bold}{_cyan}╚══════════════════════════════════════════════════════════════════╝{_reset}
 """
 
 
@@ -261,7 +261,7 @@ def create_session_tree_view(
     lines.append(render_tree(tree, use_color=use_color))
 
     # Legend
-    lines.append(f"\n{DIM}{'─' * 60}{RESET}")
+    lines.append("\n" + separator("─", 0, DIM))
     lines.append(f"{DIM}Legend: 📁 Same Project │ 📄 Shared Files │ 🧠 Similar Topics{RESET}")
     lines.append("")
 

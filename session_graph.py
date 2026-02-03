@@ -18,8 +18,8 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 from chrono_utils import (
-    ERAS, RESET, BOLD, DIM,
-    classify_era, parse_timestamp, format_timestamp_relative
+    ERAS, RESET, BOLD, DIM, CYAN, GREEN, BLUE, MAGENTA, GRAY,
+    classify_era, parse_timestamp, format_timestamp_relative, separator
 )
 from summary_store import SummaryStore
 from session_exploder import parse_raw_session, extract_files_and_tools, shorten_path
@@ -185,11 +185,9 @@ def format_session_graph(
     Shows the target session with its connections radiating out.
     """
     if use_color:
-        CYAN = "\033[96m"
-        GREEN = "\033[92m"
-        YELLOW = "\033[94m"  # Blue (visible on light backgrounds)
-        MAGENTA = "\033[95m"
-        WHITE = "\033[90m"  # Dark gray (visible on light backgrounds)
+        # Local aliases reference chrono_utils module-level constants
+        YELLOW = BLUE    # "Yellow" is actually blue for light-bg visibility
+        WHITE = GRAY     # "White" is actually dark gray for light-bg visibility
     else:
         CYAN = GREEN = YELLOW = MAGENTA = WHITE = ""
 
@@ -230,7 +228,7 @@ def format_session_graph(
     same_time = [(n, r, s) for n, r, s in related if "same project" not in r and "shared files" not in r]
 
     lines.append(f"  {BOLD}📡 CONNECTIONS ({len(related)} related sessions){RESET}")
-    lines.append(f"  {'─' * 58}")
+    lines.append(separator("─", 2))
     lines.append("")
 
     # Same project sessions
@@ -280,9 +278,9 @@ def format_session_graph(
     lines.append("")
 
     # Commands section
-    lines.append(f"  {BOLD}{'═' * 58}{RESET}")
+    lines.append(separator("═", 2, BOLD))
     lines.append(f"  {BOLD}⏰ QUICK COMMANDS{RESET}")
-    lines.append(f"  {'─' * 58}")
+    lines.append(separator("─", 2))
 
     for i, (node, reason, strength) in enumerate(related[:5], 1):
         node_era = classify_era(node.timestamp)
@@ -354,12 +352,12 @@ def graph_project_command(project_name: str, limit: int = 15) -> bool:
     project_sessions = project_sessions[:limit]
 
     lines = []
-    lines.append(f"\n{BOLD}\033[96m╔══════════════════════════════════════════════════════════════════╗{RESET}")
-    lines.append(f"{BOLD}\033[96m║  🌳 PROJECT GRAPH: {project_name[:40]:<40}  {RESET}")
-    lines.append(f"{BOLD}\033[96m╚══════════════════════════════════════════════════════════════════╝{RESET}")
+    lines.append(f"\n{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}")
+    lines.append(f"{BOLD}{CYAN}║  🌳 PROJECT GRAPH: {project_name[:40]:<40}  {RESET}")
+    lines.append(f"{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}")
     lines.append("")
     lines.append(f"  {BOLD}{len(project_sessions)} sessions found{RESET}")
-    lines.append(f"  {'─' * 58}")
+    lines.append(separator("─", 2))
     lines.append("")
 
     # Group by era
@@ -375,7 +373,7 @@ def graph_project_command(project_name: str, limit: int = 15) -> bool:
             continue
 
         lines.append(f"  {era.color}{BOLD}{era.emoji} {era.name.upper()} - {era.time_period} ({len(sessions)}){RESET}")
-        lines.append(f"  {era.color}{'─' * 55}{RESET}")
+        lines.append(separator("─", 2, era.color))
 
         for node in sessions:
             time_str = format_timestamp_relative(node.timestamp)
@@ -386,9 +384,9 @@ def graph_project_command(project_name: str, limit: int = 15) -> bool:
         lines.append("")
 
     # Commands
-    lines.append(f"  {BOLD}{'═' * 58}{RESET}")
+    lines.append(separator("═", 2, BOLD))
     lines.append(f"  {BOLD}⏰ QUICK COMMANDS{RESET}")
-    lines.append(f"  {'─' * 58}")
+    lines.append(separator("─", 2))
 
     for i, node in enumerate(project_sessions[:5], 1):
         era = classify_era(node.timestamp)

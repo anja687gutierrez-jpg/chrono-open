@@ -196,6 +196,94 @@ def safe_load_json(path: Path, default: Any = None) -> Any:
 
 
 # ============================================================
+# Index Lock File
+# ============================================================
+
+class IndexLock:
+    """
+    File-based lock to prevent concurrent indexing.
+
+    Uses a PID-based lock file (~/.chrono/.index.lock) to detect
+    if another indexer is already running. Stale locks (from crashed
+    processes) are automatically cleaned up by checking if the PID
+    is still alive.
+    """
+
+    def __init__(self):
+        self.lock_path = get_data_dir() / ".index.lock"
+        self._held = False
+
+    def _is_pid_alive(self, pid: int) -> bool:
+        """Check if a process with the given PID is still running."""
+        try:
+            os.kill(pid, 0)  # Signal 0 = check existence, don't kill
+            return True
+        except ProcessLookupError:
+            return False  # Process doesn't exist
+        except PermissionError:
+            return True  # Process exists but we can't signal it
+
+    def acquire(self) -> bool:
+        """
+        Attempt to acquire the index lock.
+
+        Returns:
+            True if lock acquired, False if another indexer is running.
+        """
+        if self.lock_path.exists():
+            try:
+                content = self.lock_path.read_text().strip()
+                old_pid = int(content)
+                if self._is_pid_alive(old_pid):
+                    return False  # Another indexer is genuinely running
+                # Stale lock — process is dead, clean up
+            except (ValueError, IOError, OSError):
+                pass  # Corrupt lock file, remove it
+            try:
+                self.lock_path.unlink()
+            except OSError:
+                pass
+
+        # Write our PID
+        try:
+            self.lock_path.write_text(str(os.getpid()))
+            self._held = True
+            return True
+        except OSError:
+            return False
+
+    def release(self):
+        """Release the index lock."""
+        if self._held:
+            try:
+                self.lock_path.unlink()
+            except OSError:
+                pass
+            self._held = False
+
+    def holder_pid(self) -> int:
+        """Get the PID of the current lock holder, or 0 if no lock."""
+        if not self.lock_path.exists():
+            return 0
+        try:
+            return int(self.lock_path.read_text().strip())
+        except (ValueError, IOError, OSError):
+            return 0
+
+    def __enter__(self):
+        if not self.acquire():
+            holder = self.holder_pid()
+            raise RuntimeError(
+                f"Another indexer is running (PID {holder}). "
+                f"Wait for it to finish or remove {self.lock_path}"
+            )
+        return self
+
+    def __exit__(self, *args):
+        self.release()
+
+
+# ============================================================
 # Version Info
 # ============================================================
 

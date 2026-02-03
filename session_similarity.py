@@ -11,7 +11,10 @@ from pathlib import Path
 from embedding_service import EmbeddingService
 from vector_store import SessionVectorStore
 from summary_store import SummaryStore
-from chrono_utils import classify_era, format_timestamp_relative, RESET, BOLD, DIM
+from chrono_utils import (
+    classify_era, format_timestamp_relative,
+    RESET, BOLD, DIM, CYAN, GREEN, BLUE
+)
 
 
 def find_similar_sessions(
@@ -122,9 +125,8 @@ def format_similar_sessions(
 ) -> str:
     """Format similar sessions for display."""
     if use_color:
-        CYAN = "\033[96m"
-        GREEN = "\033[92m"
-        YELLOW = "\033[94m"  # Blue (visible on light backgrounds)
+        # Local alias: "Yellow" is actually blue for light-bg visibility
+        YELLOW = BLUE
     else:
         CYAN = GREEN = YELLOW = ""
 

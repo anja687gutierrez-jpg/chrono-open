@@ -29,11 +29,12 @@ from embedding_service import EmbeddingService
 from vector_store import SessionVectorStore
 from summary_store import SummaryStore
 from chrono_utils import (
-    ERAS, Era, FUTURE, END_OF_TIME, RESET, BOLD, DIM,
+    ERAS, Era, FUTURE, END_OF_TIME, RESET, BOLD, DIM, CYAN,
     classify_era, get_era_by_code, get_era_date_range,
     parse_flexible_date, is_within_date_range, is_within_era,
     format_era_header, format_era_badge, format_era_compact,
-    format_timestamp_relative, get_era_summary
+    format_timestamp_relative, get_era_summary,
+    term_width, separator
 )
 from session_exploder import explode_session, format_exploded_view
 from session_graph import graph_command, graph_project_command, find_related_sessions
@@ -50,7 +51,7 @@ import subprocess
 # ============================================================
 
 CHRONO_BANNER = f"""
-{BOLD}\033[96m
+{BOLD}{CYAN}
    ██████╗██╗  ██╗██████╗  ██████╗ ███╗   ██╗ ██████╗
   ██╔════╝██║  ██║██╔══██╗██╔═══██╗████╗  ██║██╔═══██╗
   ██║     ███████║██████╔╝██║   ██║██╔██╗ ██║██║   ██║
@@ -61,7 +62,7 @@ CHRONO_BANNER = f"""
 {DIM}  Project Epoch - Time-Travel Through Your Code History{RESET}
 """
 
-CHRONO_MINI = f"{BOLD}\033[96m⏰ CHRONO{RESET}"
+CHRONO_MINI = f"{BOLD}{CYAN}⏰ CHRONO{RESET}"
 
 
 # ============================================================
@@ -109,8 +110,12 @@ def find_sessions_chrono(
     # Get active sessions to exclude
     active_sessions = get_active_session_ids() if exclude_active else set()
 
+    # Cap query length for embedding (nomic-embed-text context is 8192 tokens,
+    # ~2000 chars is a safe limit to avoid degraded embeddings)
+    embed_query = query[:2000] if len(query) > 2000 else query
+
     # Embed the query
-    query_embedding = embedder.embed(query)
+    query_embedding = embedder.embed(embed_query)
 
     # 1. Vector (semantic) search
     sessions = store.search_sessions(query_embedding, n_sessions=top_k * 5)
@@ -188,9 +193,10 @@ def find_sessions_chrono(
 def show_eras_command(store: SessionVectorStore) -> None:
     """Show all eras with session counts."""
     print(CHRONO_BANNER)
-    print(f"{BOLD}{'═' * 70}{RESET}")
+    print(separator("═", 0, BOLD))
     print(f"{BOLD}  TIME ERAS - Navigate Your Development History{RESET}")
-    print(f"{BOLD}{'═' * 70}{RESET}\n")
+    print(separator("═", 0, BOLD))
+    print()
 
     # Get all sessions to count by era
     all_sessions = store.list_sessions(limit=10000)
@@ -223,7 +229,7 @@ def show_eras_command(store: SessionVectorStore) -> None:
         print()
 
     # Show special eras (Phase 2+)
-    print(f"  {DIM}{'─' * 66}{RESET}")
+    print(separator("─", 2, DIM))
     print(f"  {BOLD}  Coming Soon:{RESET}\n")
 
     # Future - Lavos Detection (predicted issues to prevent)
@@ -236,7 +242,7 @@ def show_eras_command(store: SessionVectorStore) -> None:
     print(f"     {DIM}Bookmarked important sessions - your hub between all eras{RESET}")
     print()
 
-    print(f"  {DIM}{'─' * 66}{RESET}")
+    print(separator("─", 2, DIM))
     print(f"  {BOLD}Total: {total_sessions} sessions indexed{RESET}\n")
 
     # Usage hints
@@ -292,20 +298,27 @@ def format_results_chrono(query: str, sessions: List[Dict], show_banner: bool = 
     if show_banner:
         lines.append(CHRONO_BANNER)
 
-    lines.append(f"{BOLD}{'═' * 65}{RESET}")
+    lines.append(separator("═", 0, BOLD))
     lines.append(f"{BOLD}  🔍 TIME GATE SEARCH{RESET}")
-    lines.append(f"{BOLD}{'═' * 65}{RESET}")
+    lines.append(separator("═", 0, BOLD))
     lines.append("")
-    lines.append(f"  Searching the timestream for: \"{query}\"")
+
+    # Truncate very long queries for display (full query still used for search)
+    display_query = query
+    if len(display_query) > 80:
+        display_query = display_query[:77] + "..."
+    lines.append(f"  Searching the timestream for: \"{display_query}\"")
     lines.append("")
 
     if not sessions:
-        lines.append(f"  {DIM}No sessions found in this era.{RESET}")
+        lines.append(f"  {DIM}No matching sessions found.{RESET}")
         lines.append("")
-        lines.append("  Tips:")
-        lines.append("    • Try a different search query")
-        lines.append("    • Remove era filter to search all time periods")
-        lines.append("    • Run 'python indexer.py' to update your index")
+        lines.append(f"  {BOLD}Suggestions:{RESET}")
+        lines.append(f"    • Try broader or different search terms")
+        lines.append(f"    • Remove --era filter to search all time periods")
+        lines.append(f"    • Check your index: chrono index --stats")
+        lines.append(f"    • Update index with new sessions: chrono index")
+        lines.append("")
         return "\n".join(lines)
 
     # Group by era for display
@@ -320,18 +333,20 @@ def format_results_chrono(query: str, sessions: List[Dict], show_banner: bool = 
         relative_time = session.get("relative_time", "unknown")
 
         # Use AI summary if available, otherwise extract from preview
+        # Truncate to fit terminal: 5-char indent + "📝 " prefix = ~9 chars overhead
+        summary_max = term_width() - 10
         ai_summary = summary_store.get(session_id)
         if ai_summary:
-            summary = ai_summary[:70] + "..." if len(ai_summary) > 70 else ai_summary
+            summary = ai_summary[:summary_max] + "..." if len(ai_summary) > summary_max else ai_summary
         else:
-            summary = extract_summary(preview, max_len=65)
+            summary = extract_summary(preview, max_len=summary_max)
 
         # Show era header if changed (includes both game year AND time period)
         if era.code != (current_era.code if current_era else None):
             current_era = era
-            lines.append(f"  {era.color}{'─' * 64}{RESET}")
+            lines.append(separator("─", 2, era.color))
             lines.append(f"  {format_era_header(era)}")
-            lines.append(f"  {era.color}{'─' * 64}{RESET}")
+            lines.append(separator("─", 2, era.color))
             lines.append("")
 
         # Recommended badge
@@ -339,13 +354,15 @@ def format_results_chrono(query: str, sessions: List[Dict], show_banner: bool = 
 
         lines.append(f"  {BOLD}› {i}. #{session_id[:8]}{RESET}{recommended}")
         lines.append(f"     {DIM}📝 {summary}{RESET}")
-        lines.append(f"     {era.color}{era.emoji} {era.time_period}{RESET} │ {project} │ {score}% match │ {relative_time}")
+        # Pad era and truncate project for aligned columns
+        proj_display = project[:20] if len(project) > 20 else project
+        lines.append(f"     {era.color}{era.emoji} {era.time_period:<15}{RESET} │ {proj_display:<20} │ {score}% │ {relative_time}")
         lines.append("")
 
     # Fork commands section
-    lines.append(f"  {BOLD}{'═' * 60}{RESET}")
+    lines.append(separator("═", 2, BOLD))
     lines.append(f"  {BOLD}⏰ TIME GATE COMMANDS{RESET} (copy to terminal)")
-    lines.append(f"  {BOLD}{'═' * 60}{RESET}")
+    lines.append(separator("═", 2, BOLD))
     lines.append("")
 
     for i, session in enumerate(sessions, 1):
@@ -357,7 +374,7 @@ def format_results_chrono(query: str, sessions: List[Dict], show_banner: bool = 
     lines.append("")
 
     # Footer hints
-    lines.append(f"  {DIM}{'─' * 60}{RESET}")
+    lines.append(separator("─", 2, DIM))
     lines.append(f"  {DIM}💡 chrono eras        - Browse all time periods{RESET}")
     lines.append(f"  {DIM}💡 chrono --help      - Full command reference{RESET}")
     lines.append("")

@@ -35,7 +35,8 @@ from session_utils import (
 )
 from project_classifier import classify_session, KNOWN_PROJECTS
 from session_exploder import extract_files_and_tools, parse_raw_session
-from chrono_config import atomic_write_json, safe_load_json
+from chrono_config import atomic_write_json, safe_load_json, IndexLock
+from chrono_utils import separator
 
 
 class SessionIndexer:
@@ -192,8 +193,19 @@ class SessionIndexer:
 
         # Skip active sessions (being written to)
         if session_id in self.active_sessions:
-            print(f"    ⏭ Skipping active session")
+            print(f"    ⏭ Skipping active session (detected via process list)")
             return -1  # Special code for "skipped"
+
+        # Additional safety: skip files modified very recently (likely being written)
+        try:
+            import time
+            mtime = session_path.stat().st_mtime
+            age_seconds = time.time() - mtime
+            if age_seconds < 30:
+                print(f"    ⏭ Skipping recently modified session ({age_seconds:.0f}s ago)")
+                return -1  # Treat same as active
+        except OSError:
+            pass
 
         # Log file size
         try:
@@ -277,6 +289,33 @@ class SessionIndexer:
         Returns:
             Statistics about the indexing run
         """
+        # Acquire index lock to prevent concurrent indexing
+        lock = IndexLock()
+        if not lock.acquire():
+            holder = lock.holder_pid()
+            print(f"\n⚠ Another indexer is already running (PID {holder}).")
+            print(f"  Wait for it to finish, or remove the lock file:")
+            print(f"  rm {lock.lock_path}")
+            return {"error": "Another indexer is running"}
+
+        try:
+            return self._index_all_inner(
+                reindex=reindex,
+                limit=limit,
+                skip_active=skip_active,
+                single_session=single_session,
+            )
+        finally:
+            lock.release()
+
+    def _index_all_inner(
+        self,
+        reindex: bool = False,
+        limit: Optional[int] = None,
+        skip_active: bool = True,
+        single_session: Optional[str] = None
+    ) -> dict:
+        """Inner implementation of index_all (called with lock held)."""
         start_time = datetime.now()
 
         # Find all sessions first to check if there's work to do
@@ -299,10 +338,11 @@ class SessionIndexer:
 
         # Get already indexed
         if reindex:
-            indexed = set()
             if not single_session:
-                print("Reindexing all sessions from scratch...")
-                self.store.reset()
+                # Safe reindex: delete each session's chunks as we re-index it
+                # (instead of bulk-deleting upfront, which loses all data if interrupted)
+                print("Reindexing all sessions (safe mode — old data preserved until replaced)...")
+                indexed = set()  # Treat all as unindexed
             else:
                 # For single session, just remove that session's chunks
                 for s in all_sessions:
@@ -342,9 +382,9 @@ class SessionIndexer:
             print(f"⏭ Will skip {len(self.active_sessions)} active session(s)")
 
         # Index each session
-        print("\n" + "=" * 60)
+        print("\n" + separator("=", 0))
         print("Indexing Sessions")
-        print("=" * 60)
+        print(separator("=", 0))
 
         total_chunks = 0
         successful = 0
@@ -360,6 +400,11 @@ class SessionIndexer:
             print(f"    Project: {project_name}")
 
             try:
+                # For reindex: delete old chunks before re-indexing this session
+                # (safe: only loses one session's data if interrupted, not all)
+                if reindex and not single_session:
+                    self.store.delete_session(session_id)
+
                 chunks_added = self.index_session(session_path)
 
                 if chunks_added == -1:
@@ -380,25 +425,35 @@ class SessionIndexer:
                 failed += 1
                 print(f"    ✗ Error: {e}")
 
+        # For full reindex: clean up any sessions in ChromaDB that
+        # weren't in the new scan (deleted session files)
+        if reindex and not single_session:
+            all_session_ids = {s.stem for s in all_sessions}
+            orphaned = self.store.get_indexed_session_ids() - all_session_ids - indexed
+            for orphan_id in orphaned:
+                self.store.delete_session(orphan_id)
+            if orphaned:
+                print(f"\n  Cleaned {len(orphaned)} orphaned session(s) from ChromaDB")
+
         # Save progress
         self.save_indexed_sessions(indexed)
 
         duration = (datetime.now() - start_time).total_seconds()
 
         # Print summary
-        print("\n" + "=" * 60)
+        print("\n" + separator("=", 0))
         print("Indexing Complete")
-        print("=" * 60)
+        print(separator("=", 0))
 
         stats = self.store.get_stats()
 
-        print(f"\nSessions indexed: {successful}")
+        print(f"\n  {'Sessions indexed:':<26} {successful}")
         if skipped > 0:
-            print(f"Sessions skipped (active): {skipped}")
-        print(f"Sessions failed: {failed}")
-        print(f"Chunks added: {total_chunks}")
-        print(f"Total in database: {stats.get('total_chunks', 0)} chunks")
-        print(f"Time elapsed: {duration:.1f} seconds")
+            print(f"  {'Sessions skipped:':<26} {skipped} (active)")
+        print(f"  {'Sessions failed:':<26} {failed}")
+        print(f"  {'Chunks added:':<26} {total_chunks}")
+        print(f"  {'Total in database:':<26} {stats.get('total_chunks', 0)} chunks")
+        print(f"  {'Time elapsed:':<26} {duration:.1f}s")
 
         # Verify ChromaDB/JSON cache are in sync
         integrity = self.verify_cache_integrity(verbose=True)
@@ -452,13 +507,14 @@ def main():
 
     if args.stats:
         stats = indexer.store.get_stats()
-        print("\nCurrent Index Stats:")
-        print("=" * 40)
+        print("\n  Current Index Stats:")
+        print(separator("═", 2))
         for key, value in stats.items():
-            print(f"  {key}: {value}")
+            label = key.replace("_", " ").title()
+            print(f"  {label + ':':<22} {value}")
 
         indexed = indexer.get_indexed_sessions()
-        print(f"  indexed_sessions: {len(indexed)}")
+        print(f"  {'Indexed Sessions:':<22} {len(indexed)}")
 
         # Run integrity check
         integrity = indexer.verify_cache_integrity(verbose=True)
