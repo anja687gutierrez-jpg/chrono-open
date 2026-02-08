@@ -931,10 +931,10 @@ def _main_inner():
         help="Hide the ASCII banner"
     )
 
-    args = parser.parse_args()
+    args, remaining = parser.parse_known_args()
 
     # Handle 'eras' subcommand
-    query_str = " ".join(args.query) if args.query else ""
+    query_str = " ".join(args.query + remaining) if args.query or remaining else ""
 
     if query_str.lower() == "eras" or query_str.lower() == "era":
         store = SessionVectorStore()

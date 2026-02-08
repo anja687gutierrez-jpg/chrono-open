@@ -181,7 +181,6 @@ def chunk_session(path: Path, max_chunk_chars: int = 5000, max_messages: int = 5
             chunk_index += 1
             current_chunk_parts = []
             current_chunk_size = 0
-            first_timestamp = timestamp
         current_chunk_parts.append(formatted)
         current_chunk_size += formatted_size
 

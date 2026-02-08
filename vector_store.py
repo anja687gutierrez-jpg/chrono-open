@@ -382,6 +382,11 @@ class SessionVectorStore:
                         "chunk_count": 0,
                         "timestamp": meta.get("timestamp", "")
                     }
+                else:
+                    existing_ts = session_info[sid]["timestamp"]
+                    new_ts = meta.get("timestamp", "")
+                    if new_ts and (not existing_ts or new_ts < existing_ts):
+                        session_info[sid]["timestamp"] = new_ts
                 session_info[sid]["chunk_count"] += 1
 
             return list(session_info.values())[:limit]

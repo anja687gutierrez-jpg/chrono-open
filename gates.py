@@ -197,6 +197,21 @@ def cmd_list() -> None:
         reverse=True
     )
 
+    # Refresh gates with missing timestamps from vector store
+    dirty = False
+    for name, gate in gates.items():
+        if not gate.get("timestamp") or gate.get("project", "unknown") == "unknown":
+            info = get_session_info(gate.get("session_id", ""))
+            if info:
+                if not gate.get("timestamp") and info.get("timestamp"):
+                    gate["timestamp"] = info["timestamp"]
+                    dirty = True
+                if gate.get("project", "unknown") == "unknown" and info.get("project"):
+                    gate["project"] = info["project"]
+                    dirty = True
+    if dirty:
+        save_gates(data)
+
     for i, (name, gate) in enumerate(sorted_gates, 1):
         session_id = gate.get("session_id", "unknown")
         project = gate.get("project", "unknown")
