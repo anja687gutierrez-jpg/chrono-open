@@ -74,19 +74,91 @@ def get_recent_session_id() -> Optional[str]:
 
 
 def get_session_info(session_id: str) -> Optional[Dict[str, Any]]:
-    """Get info about a session from the vector store."""
+    """Get info about a session from the vector store, with filesystem fallback."""
+    # Try vector store first (indexed sessions)
     try:
         from vector_store import SessionVectorStore
         store = SessionVectorStore()
 
-        # Search for this session in the store
         sessions = store.list_sessions(limit=10000)
         for session in sessions:
             if session.get("session_id", "").startswith(session_id):
                 return session
-        return None
+    except Exception:
+        pass
+
+    # Fallback: extract project from session file on disk (active/unindexed sessions)
+    try:
+        from session_parser import extract_project_name
+        claude_dir = Path.home() / ".claude" / "projects"
+        for jsonl_file in claude_dir.glob(f"**/{session_id}*.jsonl"):
+            project = extract_project_name(jsonl_file)
+            timestamp = datetime.fromtimestamp(jsonl_file.stat().st_mtime).isoformat()
+
+            # If path-based project is generic, scan content for a better match
+            if project.startswith("-Users") or project == "unknown":
+                project = _detect_project_from_content(jsonl_file) or project
+
+            return {
+                "session_id": session_id,
+                "project": project,
+                "timestamp": timestamp,
+            }
+    except Exception:
+        pass
+
+    return None
+
+
+def _detect_project_from_content(session_path: Path) -> Optional[str]:
+    """Lightweight project detection by scanning session file for known project keywords."""
+    try:
+        from project_classifier import KNOWN_PROJECTS
+
+        # Read a sample of the file (first 200 lines) for speed
+        sample = []
+        with open(session_path, "r", errors="replace") as f:
+            for i, line in enumerate(f):
+                if i >= 200:
+                    break
+                sample.append(line)
+
+        combined = " ".join(sample).lower()
+
+        best_match = None
+        best_score = 0
+
+        for proj_name, proj_info in KNOWN_PROJECTS.items():
+            score = 0
+            for kw in proj_info["keywords"]:
+                if kw.lower() in combined:
+                    score += 2
+            for pattern in proj_info["file_patterns"]:
+                if pattern.lower() in combined:
+                    score += 3
+
+            if score > best_score:
+                best_score = score
+                best_match = proj_name
+
+        return best_match if best_match and best_score >= 4 else None
     except Exception:
         return None
+
+
+def _get_project_emoji(project: str) -> str:
+    """Get the emoji for a known project, or a default."""
+    try:
+        from project_classifier import KNOWN_PROJECTS
+        proj_lower = project.lower().replace("-", "").replace("_", "")
+        for proj_name, proj_info in KNOWN_PROJECTS.items():
+            key_lower = proj_name.lower().replace("-", "").replace("_", "")
+            # Match exact, substring, or keyword overlap
+            if key_lower == proj_lower or key_lower in proj_lower or proj_lower in key_lower:
+                return proj_info["emoji"]
+    except Exception:
+        pass
+    return "📂"
 
 
 def validate_gate_name(name: str) -> bool:
@@ -157,17 +229,16 @@ def cmd_save(name: str, session_id: Optional[str] = None, notes: str = "") -> No
     # Display confirmation
     era = classify_era(timestamp)
     rel_time = format_timestamp_relative(timestamp)
+    proj_emoji = _get_project_emoji(project)
 
-    print(f"\n  {END_OF_TIME.color}{END_OF_TIME.emoji} TIME GATE CREATED{RESET}")
+    print(f"\n  {END_OF_TIME.color}{END_OF_TIME.emoji} TIME GATE SAVED{RESET}")
     print(separator("─", 2))
-    print(f"  {BOLD}Name:{RESET}     {name}")
-    print(f"  {BOLD}Session:{RESET}  #{session_id[:8]}...")
-    print(f"  {BOLD}Project:{RESET}  {project}")
-    print(f"  {BOLD}Era:{RESET}      {era.emoji} {era.time_period} ({rel_time})")
+    print(f"  {BOLD}{name}{RESET}")
+    print(f"  {proj_emoji} {project}  {DIM}│{RESET}  {era.emoji} {era.time_period} ({rel_time})")
     if notes:
-        print(f"  {BOLD}Notes:{RESET}    {notes}")
+        print(f"  {DIM}📝 {notes}{RESET}")
     print(separator("─", 2))
-    print(f"\n  {DIM}Jump to this gate anytime:{RESET} gate jump {name}\n")
+    print(f"\n  {DIM}Jump back:{RESET} chrono gate jump {name}\n")
 
 
 def cmd_list() -> None:
@@ -197,34 +268,41 @@ def cmd_list() -> None:
         reverse=True
     )
 
-    # Refresh gates with missing timestamps from vector store
+    # Refresh gates with missing/generic project or timestamp from vector store
     dirty = False
     for name, gate in gates.items():
-        if not gate.get("timestamp") or gate.get("project", "unknown") == "unknown":
+        project = gate.get("project", "unknown")
+        needs_refresh = (
+            not gate.get("timestamp")
+            or project == "unknown"
+            or project.startswith("-Users")
+        )
+        if needs_refresh:
             info = get_session_info(gate.get("session_id", ""))
             if info:
                 if not gate.get("timestamp") and info.get("timestamp"):
                     gate["timestamp"] = info["timestamp"]
                     dirty = True
-                if gate.get("project", "unknown") == "unknown" and info.get("project"):
-                    gate["project"] = info["project"]
-                    dirty = True
+                if info.get("project") and info["project"] != project:
+                    # Only update if the new project is more specific
+                    new_proj = info["project"]
+                    if new_proj != "unknown" and not new_proj.startswith("-Users"):
+                        gate["project"] = new_proj
+                        dirty = True
     if dirty:
         save_gates(data)
 
     for i, (name, gate) in enumerate(sorted_gates, 1):
-        session_id = gate.get("session_id", "unknown")
         project = gate.get("project", "unknown")
         timestamp = gate.get("timestamp")
         notes = gate.get("notes", "")
 
         era = classify_era(timestamp)
         rel_time = format_timestamp_relative(timestamp)
+        proj_emoji = _get_project_emoji(project)
 
         print(f"  {BOLD}› {name}{RESET}")
-        # Pad era and truncate project for aligned columns
-        proj_display = project[:20] if len(project) > 20 else project
-        print(f"    {era.color}{era.emoji} {era.time_period:<15}{RESET} │ #{session_id[:8]} │ {proj_display:<20} │ {rel_time}")
+        print(f"    {proj_emoji} {project}  {DIM}│{RESET}  {era.color}{era.emoji} {era.time_period}{RESET}  {DIM}│{RESET}  {rel_time}")
         if notes:
             print(f"    {DIM}📝 {notes}{RESET}")
         print()
