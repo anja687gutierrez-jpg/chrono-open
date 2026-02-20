@@ -151,8 +151,7 @@ def find_sessions_chrono(
         print(f"  {DIM}Your search index is empty. Let's fix that:{RESET}\n")
         print(f"  {BOLD}1.{RESET} chrono index          {DIM}← Index all Claude sessions{RESET}")
         print(f"  {BOLD}2.{RESET} chrono index --stats   {DIM}← Check index health{RESET}")
-        print(f"\n  {DIM}Chrono needs Ollama running for embeddings:{RESET}")
-        print(f"     ollama serve")
+        print(f"\n  {DIM}Ollama starts automatically when needed.{RESET}")
         print()
         return []
 
@@ -697,7 +696,7 @@ def status_command() -> None:
 
     # Display
     db_status = f"✅ {sessions} sessions ({chunks} chunks, {projects} projects)" if db_ok else "❌ ChromaDB error"
-    ollama_status = "✅ running" if ollama_ok else "❌ not running"
+    ollama_status = "✅ running" if ollama_ok else "⏸ not running (auto-starts when needed)"
 
     print(f"  {BOLD}{'Index:':<18}{RESET} {db_status}")
     print(f"  {BOLD}{'Ollama:':<18}{RESET} {ollama_status}")
@@ -708,7 +707,7 @@ def status_command() -> None:
 
     # Quick suggestions if something is wrong
     if not ollama_ok:
-        print(f"\n  {DIM}💡 Start Ollama: ollama serve{RESET}")
+        print(f"\n  {DIM}💡 Ollama auto-starts with search/index commands{RESET}")
     if chunks == 0 and db_ok:
         print(f"\n  {DIM}💡 Build your index: chrono index{RESET}")
 
@@ -723,10 +722,27 @@ def status_command() -> None:
 # Main CLI
 # ============================================================
 
+def _needs_ollama(query_str: str) -> bool:
+    """Return True if the command requires Ollama (search, index, eras, similar, etc.)."""
+    if not query_str.strip():
+        return False  # interactive menu — no embeddings
+    cmd = query_str.lower().split()[0] if query_str.strip() else ""
+    # Commands that do NOT need Ollama
+    no_ollama = {"gate", "tech", "lavos", "status", "git", "cleanup", "export", "help"}
+    return cmd not in no_ollama
+
+
 def main():
     from chrono_config import OllamaError, DatabaseError
+    import ollama_manager
+
+    # Pre-parse to figure out if we need Ollama before entering _main_inner
+    raw_query = " ".join(sys.argv[1:])
 
     try:
+        if _needs_ollama(raw_query):
+            ollama_manager.ensure_running()
+
         _main_inner()
     except KeyboardInterrupt:
         print(f"\n  {DIM}Time travel cancelled{RESET}")
@@ -739,8 +755,7 @@ def main():
     except OllamaError as e:
         print(f"\n{BOLD}⚠ Ollama Error:{RESET} {e}")
         print(f"  Ollama is required for semantic search embeddings.")
-        print(f"  Start it with: ollama serve")
-        print(f"  Then retry your command.\n")
+        print(f"  Auto-start failed — try running 'ollama serve' manually.\n")
         sys.exit(1)
     except DatabaseError as e:
         print(f"\n{BOLD}⚠ Database Error:{RESET} {e}")
@@ -751,6 +766,8 @@ def main():
         print(f"\n{BOLD}⚠ Error:{RESET} {e}")
         print(f"  {DIM}Run 'chrono --help' for usage info{RESET}\n")
         sys.exit(1)
+    finally:
+        ollama_manager.stop()
 
 
 _config_validated = False
@@ -773,13 +790,12 @@ def _check_first_run() -> bool:
         ))
         print()
         print(f"  {BOLD}First time here? Let's get you set up:{RESET}\n")
-        print(f"  {BOLD}1.{RESET} Make sure Ollama is running:")
-        print(f"     ollama serve\n")
-        print(f"  {BOLD}2.{RESET} Build your search index:")
+        print(f"  {BOLD}1.{RESET} Build your search index:")
         print(f"     chrono index\n")
-        print(f"  {BOLD}3.{RESET} Then search your sessions:")
+        print(f"  {BOLD}2.{RESET} Then search your sessions:")
         print(f"     chrono \"firebase auth\"")
         print(f"     chrono eras")
+        print(f"\n  {DIM}Ollama starts automatically when needed.{RESET}")
         print()
         print(f"  {DIM}Data will be stored in: {data_dir}{RESET}")
         print(f"  {DIM}Indexing scans: ~/.claude/projects/ for session files{RESET}\n")
@@ -1023,7 +1039,7 @@ def _main_inner():
             print(f"    chrono index --stats          {DIM}Show index statistics{RESET}")
             print(f"    chrono index --quiet          {DIM}Silent mode (errors only){RESET}")
             print(f"    chrono index <session-id>     {DIM}Index/re-index a single session{RESET}")
-            print(f"\n  {DIM}Requires Ollama running (ollama serve){RESET}\n")
+            print(f"\n  {DIM}Ollama starts automatically when needed.{RESET}\n")
             return
 
         # --stats: show stats and exit
