@@ -728,7 +728,7 @@ def _needs_ollama(query_str: str) -> bool:
         return False  # interactive menu — no embeddings
     cmd = query_str.lower().split()[0] if query_str.strip() else ""
     # Commands that do NOT need Ollama
-    no_ollama = {"gate", "tech", "lavos", "status", "git", "cleanup", "export", "help"}
+    no_ollama = {"gate", "tech", "lavos", "status", "git", "cleanup", "export", "help", "archive"}
     return cmd not in no_ollama
 
 
@@ -1176,6 +1176,98 @@ def _main_inner():
 
         print(f"\n  {BOLD}✅ Cleanup complete: removed {len(orphans)} sessions ({total_removed} chunks){RESET}\n")
         return
+
+    # Handle 'archive' subcommand - Tiered session archival
+    if query_str.lower().startswith("archive"):
+        parts = query_str.split()
+        if "--help" in parts or "-h" in parts:
+            print(f"\n  {BOLD}⏰ chrono archive{RESET} — Tiered session archival\n")
+            print(f"  {BOLD}Usage:{RESET}")
+            print(f"    chrono archive                    {DIM}Show archive status (tier counts){RESET}")
+            print(f"    chrono archive scan               {DIM}Dry-run: list sessions that would be archived{RESET}")
+            print(f"    chrono archive run                {DIM}Archive cold sessions (remove from ChromaDB){RESET}")
+            print(f"    chrono archive list               {DIM}List all archived sessions{RESET}")
+            print(f"    chrono archive restore <id>       {DIM}Re-index an archived session{RESET}")
+            print()
+            return
+
+        from archive_manager import ArchiveManager
+
+        sub = parts[1] if len(parts) > 1 else ""
+
+        if sub == "scan":
+            mgr = ArchiveManager()
+            scan = mgr.scan()
+            print(f"\n  {BOLD}⏰ ARCHIVE SCAN{RESET} (dry run — nothing will change)")
+            print(separator("─", 2))
+            print(f"  {BOLD}{'🔥 Hot (active project, <30d):':<38}{RESET} {scan['hot']} sessions")
+            print(f"  {BOLD}{'🟡 Warm (project, 30+ days):':<38}{RESET} {scan['warm']} sessions")
+            print(f"  {BOLD}{'🧊 Cold (non-project):':<38}{RESET} {scan['cold']} sessions ({scan['cold_chunks']} chunks)")
+            if scan['already_archived'] > 0:
+                print(f"  {DIM}{'Already archived:':<38} {scan['already_archived']} sessions{RESET}")
+            print()
+            if scan["cold"] > 0:
+                print(f"  {BOLD}Cold sessions to archive:{RESET}")
+                for s in scan["sessions"]["cold"]:
+                    proj = s["project"][:20]
+                    print(f"    🧊 {s['session_id'][:12]}  {proj:<20}  ({s['chunk_count']} chunks)")
+                print(f"\n  {DIM}Run 'chrono archive run' to archive these.{RESET}\n")
+            else:
+                print(f"  {DIM}Nothing to archive.{RESET}\n")
+            return
+
+        elif sub == "run":
+            mgr = ArchiveManager()
+            print(f"\n  {BOLD}⏰ ARCHIVING COLD SESSIONS{RESET}")
+            print(separator("─", 2))
+            result = mgr.archive_cold(dry_run=False)
+            if result["archived"] == 0:
+                print(f"  No cold sessions to archive.\n")
+            else:
+                print(f"  ✅ Archived {result['archived']} sessions, freed {result['chunks_freed']} chunks from ChromaDB\n")
+            return
+
+        elif sub == "list":
+            mgr = ArchiveManager()
+            archived = mgr.list_archived()
+            if not archived:
+                print(f"\n  {DIM}No archived sessions.{RESET}\n")
+                return
+            print(f"\n  {BOLD}⏰ ARCHIVED SESSIONS{RESET} ({len(archived)} total)")
+            print(separator("─", 2))
+            for s in archived:
+                summary = s["summary"][:50] + "..." if len(s["summary"]) > 50 else s["summary"]
+                print(f"  🧊 {s['session_id'][:12]}  {s['project']:<20}  {s['chunk_count']} chunks")
+                if summary:
+                    print(f"     {DIM}{summary}{RESET}")
+            print(f"\n  {DIM}Restore with: chrono archive restore <session-id>{RESET}\n")
+            return
+
+        elif sub == "restore" and len(parts) > 2:
+            session_arg = parts[2]
+            mgr = ArchiveManager()
+            print(f"\n  {BOLD}⏰ RESTORING SESSION{RESET}")
+            print(separator("─", 2))
+            mgr.restore(session_arg)
+            print()
+            return
+
+        else:
+            # Default: show status
+            mgr = ArchiveManager()
+            status = mgr.status()
+            print(f"\n  {BOLD}⏰ ARCHIVE STATUS{RESET}")
+            print(separator("─", 2))
+            print(f"  {BOLD}{'🔥 Hot sessions:':<30}{RESET} {status['hot']}")
+            print(f"  {BOLD}{'🟡 Warm sessions:':<30}{RESET} {status['warm']}")
+            print(f"  {BOLD}{'🧊 Cold (archivable):':<30}{RESET} {status['cold_in_chromadb']}")
+            print(f"  {BOLD}{'📦 Already archived:':<30}{RESET} {status['already_archived']}")
+            if status['total_chunks_freed'] > 0:
+                print(f"  {BOLD}{'Chunks freed (total):':<30}{RESET} {status['total_chunks_freed']}")
+            if status['last_run']:
+                print(f"  {DIM}Last archive run: {status['last_run'][:19]}{RESET}")
+            print(f"\n  {DIM}Run 'chrono archive scan' to see what would be archived.{RESET}\n")
+            return
 
     # Handle 'git' subcommand - Git time machine (forward to epoch.py)
     if query_str.lower().startswith("git"):

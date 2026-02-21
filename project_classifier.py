@@ -59,7 +59,8 @@ KNOWN_PROJECTS = {
         "description": "Firebase configuration and deployment"
     },
     "System-Maintenance": {
-        "keywords": ["icloud", "mail app", "backup", "zip", "organize", "cleanup", "archive", "sync", "shortcuts"],
+        "keywords": ["icloud", "mail app", "backup", "zip", "organize", "cleanup", "archive", "sync", "shortcuts",
+                      "login items", "launchagent", "plist", "cache", "disk space", "daemon", "background process"],
         "file_patterns": ["Library", "CloudStorage", "iCloud"],
         "emoji": "🔧",
         "description": "System maintenance and file organization"
@@ -69,6 +70,13 @@ KNOWN_PROJECTS = {
         "file_patterns": ["GoogleDrive", "Google Drive"],
         "emoji": "☁️",
         "description": "Google Drive file management"
+    },
+    "Workspace-Cleanup": {
+        "keywords": ["cleanup", "organize", "desktop", "migration", "backup strategy", "readme",
+                      "file moves", "reorg", "restructure", "workspace", "directory structure"],
+        "file_patterns": ["Desktop", "workspace-migration"],
+        "emoji": "🧹",
+        "description": "Workspace organization and file cleanup"
     },
 }
 

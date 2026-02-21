@@ -354,6 +354,12 @@ class SessionIndexer:
         else:
             indexed = self.get_indexed_sessions()
 
+        # Filter out archived sessions (intentionally removed from ChromaDB)
+        from archive_manager import get_archived_session_ids
+        archived_ids = get_archived_session_ids()
+        if archived_ids and not reindex:
+            indexed = indexed | archived_ids
+
         # Filter to new sessions
         new_sessions = [s for s in all_sessions if s.stem not in indexed]
 
