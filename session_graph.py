@@ -54,7 +54,7 @@ def extract_project_name(path: Path) -> str:
     """Extract project name from path."""
     project_dir = path.parent.name
     parts = project_dir.split("-")
-    skip_words = {"Users", "anjacarrillo", "Desktop", "Documents", "Projects",
+    skip_words = {"Users", "username", "Desktop", "Documents", "Projects",
                   "Claude", "Code", "Library", "CloudStorage", "GoogleDrive"}
     project_parts = [p for p in parts if p and p not in skip_words]
 

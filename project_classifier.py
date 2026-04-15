@@ -1,7 +1,7 @@
 """
 Project Classifier - Smart project detection from session content
 
-Fixes the "70 sessions filed under -Users-anjacarrillo" problem by
+Fixes the "70 sessions filed under -Users-username" problem by
 analyzing session content to detect the REAL project being worked on.
 
 Also handles:
@@ -66,7 +66,7 @@ KNOWN_PROJECTS = {
         "description": "System maintenance and file organization"
     },
     "Google-Drive": {
-        "keywords": ["google drive", "gdrive", "engel687", "anja687", "drive sync", "cloud storage"],
+        "keywords": ["google drive", "gdrive", "drive sync", "cloud storage"],
         "file_patterns": ["GoogleDrive", "Google Drive"],
         "emoji": "☁️",
         "description": "Google Drive file management"

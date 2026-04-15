@@ -1,7 +1,0 @@
-# Step 1: Find the most relevant past session
-cd ~/Desktop/smart-forking
-source venv/bin/activate
-python fork_detect.py "magnusview dashboard"
-
-# Step 2: Copy the fork command from the results, then in a NEW terminal:
-claude --continue bf695425-407f-4bcd-b1d2-6d2277f59399

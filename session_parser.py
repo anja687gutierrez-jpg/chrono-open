@@ -56,7 +56,7 @@ def extract_text_content(content) -> str:
 def extract_project_name(path: Path) -> str:
     project_dir = path.parent.name
     parts = project_dir.split("-")
-    skip_words = {"Users", "anjacarrillo", "Desktop", "Documents", "Projects", "Claude", "Code", "Library", "CloudStorage", "GoogleDrive"}
+    skip_words = {"Users", "username", "Desktop", "Documents", "Projects", "Claude", "Code", "Library", "CloudStorage", "GoogleDrive"}
     project_parts = [p for p in parts if p and p not in skip_words]
     if project_parts:
         return "-".join(project_parts[-3:]) if len(project_parts) > 3 else "-".join(project_parts)

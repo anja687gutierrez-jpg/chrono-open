@@ -1,8 +1,0 @@
-# Add to your ~/.zshrc for quick access
-echo 'alias fork="cd ~/Desktop/smart-forking && source venv/bin/activate && python fork_detect.py"' >> ~/.zshrc
-source ~/.zshrc
-
-# Then just run:
-fork "Tesla booking system"
-fork "Firebase authentication"
-fork "PDF export"
