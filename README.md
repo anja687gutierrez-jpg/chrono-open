@@ -35,7 +35,7 @@ Flexible date parsing supports multiple formats:
 chrono "query" --since 2024-06-15 --until 2025-12-31   # Absolute dates
 chrono "query" --since "3 months ago"                   # Relative dates
 chrono "query" --since "last week"                      # Natural language
-chrono "query" --era present --project magnusview       # Combined filters
+chrono "query" --era present --project my-dashboard       # Combined filters
 ```
 
 ---
@@ -147,7 +147,7 @@ chrono "firebase" --since 2024-01 --until 2025-06
 chrono "query" --since "last week" --until "yesterday"
 
 # Combined filters
-chrono "dashboard" --era present --project magnusview -n 10
+chrono "dashboard" --era present --project my-dashboard -n 10
 
 # Sort by date instead of relevance
 chrono "query" --sort date

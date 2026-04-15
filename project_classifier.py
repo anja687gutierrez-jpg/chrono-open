@@ -28,17 +28,17 @@ from summary_store import SummaryStore
 
 # Known projects with detection keywords and file patterns
 KNOWN_PROJECTS = {
-    "MagnusView": {
-        "keywords": ["magnus", "magnusview", "milestone", "campaign", "stap", "availability.js"],
-        "file_patterns": ["MagnusView"],
+    "Dashboard-App": {
+        "keywords": ["dashboard", "milestone", "campaign", "availability"],
+        "file_patterns": ["Dashboard"],
         "emoji": "📊",
         "description": "Dashboard application for operations management"
     },
     "Ops-Portal": {
-        "keywords": ["ops portal", "ops hub", "ops-portal", "ops_portal", "operations portal", "ops-hub-portal"],
-        "file_patterns": ["Ops Hub Portal", "Ops-Hub-Portal", "ops-portal"],
+        "keywords": ["ops portal", "operations portal", "operations management"],
+        "file_patterns": ["Ops-Portal"],
         "emoji": "🏢",
-        "description": "Operations management portal (sandbox)"
+        "description": "Operations management portal"
     },
     "Chrono": {
         "keywords": ["chrono", "smart-forking", "fork", "embedding", "vector", "session", "epoch", "lavos", "techs.py"],
@@ -47,8 +47,8 @@ KNOWN_PROJECTS = {
         "description": "Time-travel development toolkit"
     },
     "Tour-Planner": {
-        "keywords": ["pathfinding", "tour", "route", "trip", "iconic", "pathways", "ralph", "abenteuer"],
-        "file_patterns": ["App-V.01", "iconic-pathways", "abenteuer"],
+        "keywords": ["pathfinding", "tour", "route", "trip", "planning"],
+        "file_patterns": ["tour-planner"],
         "emoji": "🗺️",
         "description": "Tour route planning application"
     },

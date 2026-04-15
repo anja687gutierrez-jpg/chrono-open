@@ -416,4 +416,4 @@ if __name__ == "__main__":
         print()
         print("Example:")
         print("  python session_graph.py bf695425")
-        print("  python session_graph.py --project magnusview")
+        print("  python session_graph.py --project my-dashboard")

@@ -298,7 +298,7 @@ def show_eras_command(store: SessionVectorStore) -> None:
     # Usage hints
     print(f"  {DIM}Search an era:{RESET}    chrono \"query\" --era present")
     print(f"  {DIM}Date range:{RESET}       chrono \"query\" --since \"3 months ago\"")
-    print(f"  {DIM}Combine filters:{RESET}  chrono \"query\" --era middle_ages --project magnusview\n")
+    print(f"  {DIM}Combine filters:{RESET}  chrono \"query\" --era middle_ages --project my-dashboard\n")
 
 
 def extract_summary(preview: str, max_len: int = 60) -> str:
@@ -835,7 +835,7 @@ def _main_inner():
   %(prog)s "API" --since "3 months ago"          # Date range
   %(prog)s "react" --since 2024-06 --until 2025-01
   %(prog)s eras                                   # Show all eras
-  %(prog)s --project magnusview "real-time"      # Filter by project
+  %(prog)s --project my-dashboard "real-time"      # Filter by project
 
 {BOLD}Eras (newest to oldest):{RESET}
   🏠 present      - This Week
@@ -993,7 +993,7 @@ def _main_inner():
             print(f"    chrono graph --project <name>    # Show project timeline")
             print(f"\n  {DIM}Examples:{RESET}")
             print(f"    chrono graph bf695425")
-            print(f"    chrono graph --project magnusview\n")
+            print(f"    chrono graph --project my-dashboard\n")
             sys.exit(1)
 
         # Session ID is the second word
